@@ -1,0 +1,49 @@
+<view class="container">
+  <view class="page-title">知识分组</view>
+
+  <!-- 加载中状态 -->
+  <view wx:if="{{loading}}" class="loading">加载中...</view>
+
+  <!-- 分组列表 -->
+  <view class="group-list" wx:elif="{{groups.length > 0}}">
+    <view class="group-card card" wx:for="{{groups}}" wx:key="id">
+      <view class="card-content" bindtap="toReviewPage" data-id="{{item.id}}">
+        <view class="card-title">
+          {{item.name}}
+          <view wx:if="{{item.dueCount > 0}}" class="due-dot"></view>
+        </view>
+        <view class="card-stats">
+          <text class="due-count {{item.dueCount > 0 ? 'due' : ''}}">{{item.dueCount || 0}}</text>
+          <text class="total-count">/ {{item.knowledgeCount || 0}} 待复习</text>
+        </view>
+      </view>
+      <view class="card-actions">
+        <view class="delete-btn" bindtap="removeGroup" data-id="{{item.id}}" data-name="{{item.name}}">
+          <image class="delete-icon" src="/components/icons/delete.svg" />
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 空状态 -->
+  <view class="empty-state" wx:else>
+    <image class="empty-icon" src="/components/icons/empty.svg" mode="aspectFit"></image>
+    <view class="empty-state-text">暂无任何分组，快去添加一个吧！</view>
+  </view>
+
+  <!-- 添加分组 -->
+  <view class="add-group-form">
+    <view class="input-wrapper">
+      <input class="add-group-input" 
+             placeholder="输入新分组名称" 
+             value="{{newGroupName}}" 
+             bindinput="handleGroupNameInput" 
+             confirm-type="done"
+             bindconfirm="addGroup"/>
+    </view>
+    <view class="btn-wrapper">
+      <view class="btn-text">添加</view>
+      <button class="add-group-btn" bindtap="addGroup"></button>
+    </view>
+  </view>
+</view>

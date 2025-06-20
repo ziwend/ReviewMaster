@@ -1,0 +1,111 @@
+/* app.wxss */
+
+page {
+  background-color: var(--background-color);
+  color: var(--text-color-primary);
+  font-size: 28rpx;
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Segoe UI, Arial, Roboto, 'PingFang SC', 'miui', 'Hiragino Sans GB', 'Microsoft Yahei', sans-serif;
+  --primary-color: #007aff;
+  --background-color: #f7f8fa;
+  --card-background-color: #ffffff;
+  --text-color-primary: #333333;
+  --text-color-secondary: #888888;
+  --separator-color: #f2f2f2;
+  --danger-color: #fa5151;
+}
+
+.container {
+  padding: 24rpx;
+  box-sizing: border-box;
+}
+
+/* 通用卡片样式 */
+.card {
+  background-color: var(--card-background-color);
+  border-radius: 20rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+/* 通用按钮样式 */
+.btn {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 96rpx;
+  border-radius: 48rpx;
+  font-size: 32rpx;
+  font-weight: 500;
+  text-align: center;
+  box-sizing: border-box;
+  transition: opacity 0.2s;
+}
+
+.btn:active {
+  opacity: 0.8;
+}
+
+.btn.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.btn-primary {
+  color: #fff;
+  background-color: var(--primary-color);
+}
+
+.btn-danger {
+  color: #fff;
+  background-color: var(--danger-color);
+}
+
+.btn-secondary {
+  color: var(--text-color-primary);
+  background-color: var(--card-background-color);
+  border: 1rpx solid var(--separator-color);
+}
+
+/* 空状态通用样式 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 100rpx 40rpx;
+  color: var(--text-color-secondary);
+}
+
+.empty-state-text {
+  margin-top: 20rpx;
+  font-size: 28rpx;
+}
+
+/* 通用按钮样式 */
+.btn {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 96rpx;
+  border-radius: 48rpx;
+  font-size: 32rpx;
+  font-weight: 500;
+  text-align: center;
+  box-sizing: border-box;
+  transition: opacity 0.2s;
+}
+
+.btn:active {
+  opacity: 0.8;
+}
+
+.btn.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.btn-primary {
+  color: #fff;
+  background-color: var(--primary-color);
+}

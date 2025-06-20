@@ -1,0 +1,42 @@
+<view class="container import-container">
+  <view class="page-title">导入知识点</view>
+
+  <!-- 分组选择 -->
+  <view class="card">
+    <view class="card-header">选择分组</view>
+    <picker bindchange="bindGroupChange" value="{{groupIndex}}" range="{{groups}}" range-key="name">
+      <view class="picker-display">
+        <text>{{groups[groupIndex].name || '请选择或新建分组'}}</text>
+        <image class="picker-arrow" src="/components/icons/arrow-down.svg" />
+      </view>
+    </picker>
+  </view>
+
+  <!-- 内容输入 -->
+  <view class="card">
+    <view class="card-header">手动输入或粘贴内容</view>
+    <textarea class="content-textarea"
+              value="{{content}}"
+              bindinput="bindContentInput"
+              placeholder="每行一个知识点，格式为：\n问题[Tab]答案\n或者\n问题|||答案"
+              maxlength="-1" />
+  </view>
+
+  <!-- 导入进度 -->
+  <view class="card" wx:if="{{showProgressBar}}">
+      <view class="card-header">导入进度</view>
+      <progress class="import-progress" percent="{{progress}}" show-info stroke-width="8" activeColor="var(--primary-color)" />
+  </view>
+
+  <!-- 底部操作 -->
+  <view class="bottom-actions">
+    <view class="btn-wrapper btn-primary {{importing ? 'disabled' : ''}}">
+      <view class="btn-text">{{importing ? '导入中...' : '从输入框导入'}}</view>
+      <button class="btn-action" bindtap="startImportFromTextarea" disabled="{{importing}}"></button>
+    </view>
+    <view class="btn-wrapper btn-secondary {{importing ? 'disabled' : ''}}">
+      <view class="btn-text">从文件导入</view>
+      <button class="btn-action" bindtap="importFromTxt" disabled="{{importing}}"></button>
+    </view>
+  </view>
+</view>

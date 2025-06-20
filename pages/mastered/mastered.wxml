@@ -1,0 +1,30 @@
+<view class="container mastered-container">
+  <view class="page-header">
+    <view class="page-title">{{currentGroup.name}}</view>
+    <view class="page-subtitle">已掌握的知识</view>
+  </view>
+
+  <!-- 已掌握列表 -->
+  <block wx:if="{{masteredList.length > 0}}">
+    <view class="mastered-list">
+      <view class="card mastered-card" wx:for="{{masteredList}}" wx:key="id">
+        <view class="card-content">
+          <view class="question-text">{{item.question}}</view>
+        </view>
+        <view class="card-actions">
+          <view class="btn-wrapper btn-primary restore-btn">
+            <view class="btn-text">恢复</view>
+            <button class="btn-action" bindtap="restoreKnowledge" data-id="{{item.id}}"></button>
+          </view>
+          <image class="action-icon delete-icon" src="/components/icons/delete.svg" bindtap="removeKnowledge" data-id="{{item.id}}" />
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <!-- 空状态 -->
+  <view class="empty-state" wx:else>
+    <image class="empty-icon" src="/components/icons/empty.svg" mode="aspectFit"></image>
+    <view class="empty-state-text">还没有已掌握的知识</view>
+  </view>  
+</view>

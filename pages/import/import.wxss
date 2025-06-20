@@ -1,7 +1,9 @@
 /* pages/import/import.wxss */
 
 .import-container {
-  padding-bottom: calc(240rpx + env(safe-area-inset-bottom)); /* 适配底部操作栏高度 */
+  min-height: 100vh;
+  background: #f7f7f7;
+  /* 不用flex，不用padding-bottom */
 }
 
 .page-title {
@@ -15,13 +17,17 @@
 .card {
   margin: 0 24rpx 32rpx;
   padding: 32rpx;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .card-header {
+  margin-right: 24rpx;
   font-size: 30rpx;
   font-weight: bold;
   color: var(--text-color-primary);
-  margin-bottom: 24rpx;
 }
 
 .picker-display {
@@ -46,7 +52,7 @@
 
 .content-textarea {
   width: 100%;
-  height: 320rpx;
+  min-height: 300rpx;
   font-size: 28rpx;
   line-height: 1.6;
   padding: 20rpx;
@@ -54,6 +60,8 @@
   border: 1rpx solid var(--separator-color);
   border-radius: var(--border-radius);
   background-color: var(--background-color);
+  resize: none;
+  overflow: auto;
 }
 
 .import-progress {
@@ -70,6 +78,7 @@
   border-radius: 44rpx;
   transition: opacity 0.2s;
   overflow: hidden;
+  background: none;
 }
 
 .btn-wrapper:active {
@@ -79,6 +88,7 @@
 .btn-wrapper.disabled {
   opacity: 0.5;
   pointer-events: none;
+  background: none !important;
 }
 
 .btn-wrapper.btn-primary {
@@ -102,6 +112,7 @@
   font-size: 32rpx;
   font-weight: 500;
   pointer-events: none;
+  background: none;
 }
 
 .btn-wrapper.btn-secondary .btn-text {
@@ -118,6 +129,7 @@
   background-color: transparent;
   border: none;
   padding: 0;
+  background: none;
 }
 
 .btn-action::after {
@@ -127,19 +139,45 @@
 /* --- Layout Specifics --- */
 .bottom-actions {
   position: fixed;
-  bottom: 0;
   left: 0;
   right: 0;
+  bottom: 0;
+  z-index: 100;
+  background: #fff;
   padding: 24rpx;
   padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
-  background-color: var(--background-color);
   border-top: 1rpx solid var(--separator-color);
   display: flex;
   flex-direction: column;
   gap: 20rpx;
-  z-index: 10;
 }
 
 .bottom-actions .btn-wrapper {
   width: 100%;
+}
+
+.row-flex {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-grow: 0;
+  min-height: unset;
+  height: auto;
+}
+
+.flex-card {
+  margin: 0 24rpx 32rpx;
+  padding: 32rpx;
+  background: #fff;
+  border-radius: 16rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.03);
+  /* 不用flex:1，不用min-height:0 */
+}
+
+.progress-bar {
+  margin: 0 24rpx 16rpx;
+  padding: 32rpx;
+  background: #fff;
+  border-radius: 16rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.03);
 }

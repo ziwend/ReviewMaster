@@ -91,6 +91,7 @@ Page({
 
   toReviewPage: function (e) {
     const { id } = e.currentTarget.dataset;
+    console.log("group to review选择groupId=", id);
     wx.navigateTo({
       url: `/pages/review/review?groupId=${id}`
     });

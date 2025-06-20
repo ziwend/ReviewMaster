@@ -89,6 +89,10 @@
   background-color: #fa5151;
 }
 
+.btn-wrapper.btn-delete {
+  background-color: #888;
+}
+
 .btn-text {
   position: absolute;
   top: 0;
@@ -163,4 +167,11 @@
 
 .nav-item {
   padding: 20rpx;
+}
+
+.stat-info {
+  margin-bottom: 16rpx;
+  text-align: left;
+  font-size: 26rpx;
+  color: var(--text-color-secondary);
 }

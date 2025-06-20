@@ -1,11 +1,20 @@
 <view class="container review-container">
 
-  <!-- 复习卡片 -->
-  <block wx:if="{{current}}">
-    <view class="review-header">
-  <view class="page-title">{{currentGroup.name}}</view>
+  <!-- 加载中状态 -->
+  <view wx:if="{{loading}}" class="loading">加载中...</view>
 
-</view>
+  <!-- 复习卡片 -->
+  <block wx:elif="{{current}}">
+    <view class="review-header">
+      <view class="page-title">{{currentGroup.name}}</view>
+      <view class="stat-info">
+        <text>第{{currentStat.index}}/{{currentStat.total}}题</text>
+        <text> | 已复习{{currentStat.reviewCount}}次</text>
+        <text>，记住{{currentStat.remembered}}次</text>
+        <text>，没记住{{currentStat.forgotten}}次</text>
+        <text wx:if="{{currentStat.reviewCount > 0}}">，最近复习：{{currentStat.lastReviewAgo}}</text>
+      </view>
+    </view>
     <view class="review-card card">
       <view class="question-text">{{current.question}}</view>
       <block wx:if="{{showResult}}">
@@ -22,6 +31,10 @@
         <view class="btn-wrapper btn-danger">
           <view class="btn-text">没记住</view>
           <button class="btn-action" bindtap="markResult" data-result="false"></button>
+        </view>
+        <view class="btn-wrapper btn-delete">
+          <view class="btn-text">删除</view>
+          <button class="btn-action" bindtap="deleteCurrentKnowledge"></button>
         </view>
         <view class="btn-wrapper btn-primary">
           <view class="btn-text">记住了</view>
@@ -40,7 +53,7 @@
   <!-- 空状态 -->
   <view class="empty-state review-empty" wx:else>
     <image class="empty-icon" src="/components/icons/completed.svg" mode="aspectFit"></image>
-    <view class="empty-state-text">本轮复习已完成！</view>
+    <view class="empty-state-text">{{currentGroup.name}}：本轮复习已完成！</view>
     <view class="btn-wrapper btn-primary mastered-list-btn">
     <view class="btn-text">已掌握列表</view>
     <button class="btn-action" bindtap="toMastered"></button>

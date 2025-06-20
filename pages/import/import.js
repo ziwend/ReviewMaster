@@ -104,10 +104,12 @@ Page({
   },
 
   startImportFromTextarea() {
+    console.log("import执行startImportFromTextarea");
     this.startImport(this.data.content);
   },
 
   async startImport(fullContent) {
+
     if (this.data.importing) {
       wx.showToast({ title: '正在导入中...', icon: 'none' });
       return;

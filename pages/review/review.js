@@ -1,7 +1,19 @@
 const storage = require('../../utils/storage')
 
 // 艾宾浩斯复习间隔（分钟）
-const intervals = [5, 30, 12*60, 24*60, 2*24*60, 4*24*60, 7*24*60, 15*24*60, 30*24*60]
+// 基于记忆强度的自适应间隔算法
+function calculateNextInterval(memoryStrength, difficulty, currentInterval) {
+  // 基础调整因子 (记忆强度越高，间隔增长越快)
+  const strengthFactor = 1 + (memoryStrength / 100);
+  // 难度调整因子 (难度越高，间隔增长越慢)
+  const difficultyFactor = 1.5 - (difficulty * 0.1);
+  // 计算新间隔
+  let newInterval = currentInterval * strengthFactor * difficultyFactor;
+  
+  // 确保间隔在合理范围内 (5分钟到60天)
+  return Math.max(5, Math.min(newInterval, 60*24*60));
+}
+const BATCH_SIZE = 20; // 每天最大复习数
 
 Page({
   data: {
@@ -13,6 +25,7 @@ Page({
     current: null,
     showResult: false,
     loading: true,
+    isBatchCompleted: false, // 新增：是否完成一个批次
     currentStat: {
       index: 0,
       total: 0,
@@ -22,6 +35,11 @@ Page({
       lastReviewAgo: ''
     }
   },
+
+  // 用于存储完整复习列表和当前进度
+  fullReviewList: [],
+  globalIndex: 0,
+
   onLoad: async function(options) {
     this.timerId = null; // 初始化定时器ID
     let { groupId } = options;
@@ -62,58 +80,27 @@ Page({
       this.setData({ loading: false });
       return;
     }
-    const groupKey = `group-${groupId}`;
-    const knowledgeIds = wx.getStorageSync(groupKey) || [];
-    const BATCH_SIZE = 20;
-    let reviewList = [];
-    let current = null;
-    let currentIndex = -1;
-    const now = Date.now();
-
-    const loadBatch = (start) => {
-      const end = Math.min(start + BATCH_SIZE, knowledgeIds.length);
-      for (let i = start; i < end; i++) {
-        const k = wx.getStorageSync(`knowledge-${knowledgeIds[i]}`);
-        if (k && k.nextReviewTime <= now) {
-          reviewList.push(k);
-          if (current === null) {
-            current = k;
-            currentIndex = 0;
-            this.setData({
-              reviewList: [k],
-              currentIndex: 0,
-              current: k,
-              showResult: false,
-              loading: false
-            }, () => {
-              this.updateCurrentStat();
-            });
-          } else {
-            this.setData({
-              reviewList: [...reviewList]
-            }, () => {
-              this.updateCurrentStat();
-            });
-          }
-        }
-      }
-      if (end < knowledgeIds.length) {
-        setTimeout(() => loadBatch(end), 0);
-      } else if (reviewList.length === 0) {
-        this.setData({
-          reviewList: [],
-          currentIndex: -1,
-          current: null,
-          showResult: false,
-          loading: false
-        }, () => {
-          this.updateCurrentStat();
-        });
-      }
-    };
-
-    this.setData({ loading: true });
-    loadBatch(0);
+    // 每次都刷新今日批次
+    storage.resetTodayReviewListIfNeeded(groupId);
+    const todayList = storage.getTodayReviewList(groupId, BATCH_SIZE);
+    if (todayList.length === 0) {
+      this.setData({
+        reviewList: [],
+        current: null,
+        currentIndex: -1,
+        loading: false
+      });
+      this.updateCurrentStat();
+      return;
+    }
+    this.setData({
+      reviewList: todayList,
+      current: todayList[0],
+      currentIndex: 0,
+      isBatchCompleted: false,
+      loading: false
+    });
+    this.updateCurrentStat();
   },
 
   async markResult(e) {
@@ -130,60 +117,75 @@ Page({
     // 记录历史
     current.history.push({ time: Date.now(), result })
 
+    // 更新记忆强度和难度
     if (result) {
-      current.reviewCount += 1
-      if (current.reviewCount >= intervals.length) {
-        current.status = 'mastered'
-      } else {
-        current.status = 'reviewing'
-        current.nextReviewTime = Date.now() + intervals[current.reviewCount-1]*60*1000
-      }
-      await storage.saveKnowledge(current)
-      this.setData({ showResult: true }, () => {
-        this.updateCurrentStat();
-      });
-      this.timerId = setTimeout(() => {
-        this.nextOne()
-      }, 1000) // 1秒后自动下一个
+      // 回答正确：提高记忆强度，降低难度
+      current.memoryStrength = Math.min(100, current.memoryStrength + 15 + (current.difficulty * 2));
+      current.difficulty = Math.max(1, current.difficulty - 0.1);
     } else {
-      current.status = 'pending'
-      current.reviewCount = 0
-      current.nextReviewTime = Date.now() + intervals[0]*60*1000
-      await storage.saveKnowledge(current)
-      this.setData({ showResult: true }, () => {
-        this.updateCurrentStat();
-      });
-      this.timerId = setTimeout(() => {
-        this.nextOne();
-      }, 3000); // 3秒后自动下一个
+      // 回答错误：降低记忆强度，提高难度
+      current.memoryStrength = Math.max(0, current.memoryStrength - 25 - (current.difficulty * 3));
+      current.difficulty = Math.min(5, current.difficulty + 0.2);
     }
+    
+    // 计算下次复习间隔
+    current.lastInterval = calculateNextInterval(
+      current.memoryStrength, 
+      current.difficulty, 
+      current.lastInterval || 5 // 初始间隔5分钟
+    );
+    
+    current.nextReviewTime = Date.now() + current.lastInterval * 60 * 1000;
+    
+    // 更新状态
+    current.reviewCount += 1;
+    if (current.memoryStrength >= 95) {
+      current.status = 'mastered';
+    } else if (current.memoryStrength >= 50) {
+      current.status = 'reviewing';
+    } else {
+      current.status = 'pending';
+    }
+    
+    await storage.saveKnowledge(current);
+    this.setData({ showResult: true }, () => {
+      this.updateCurrentStat();
+    });
+    
+    // 设置自动翻页定时器
+    const delay = result ? 10000 : 30000; // 记得10秒，不记得30秒
+    this.timerId = setTimeout(() => {
+      this.nextOne();
+    }, delay);
   },
 
   nextOne() {
+    console.log("review执行nextOne");
     if (this.timerId) {
       clearTimeout(this.timerId);
       this.timerId = null;
     }
+    
     let { currentIndex, reviewList } = this.data;
     currentIndex++;
+    
+    // 如果当前批次还没完成
     if (currentIndex < reviewList.length) {
+      this.globalIndex++; // 全局进度加一
       this.setData({
         currentIndex: currentIndex,
         current: reviewList[currentIndex],
         showResult: false
-      }, () => {
-        this.updateCurrentStat();
-      });
+      }, () => this.updateCurrentStat());
     } else {
+      // 今日批次已完成
       this.setData({
         current: null,
         currentIndex: -1,
         reviewList: [],
-        showResult: false
-      }, () => {
-        this.updateCurrentStat();
+        isBatchCompleted: true
       });
-      wx.showToast({ title: '本轮复习完成！', icon: 'success' });
+      this.updateCurrentStat();
     }
   },
 
@@ -219,17 +221,17 @@ Page({
 
   // 计算当前知识点的统计信息
   computeCurrentStat() {
-    const { reviewList, currentIndex, current } = this.data;
-    if (!current) return {
-      index: 0,
-      total: reviewList.length,
-      reviewCount: 0,
-      remembered: 0,
-      forgotten: 0,
-      lastReviewAgo: ''
-    };
-    const total = reviewList.length;
+    const { current, reviewList, currentIndex } = this.data;
+    const total = reviewList.length; // 本批数量
     const index = currentIndex + 1;
+    if (!current) {
+      return {
+        index: 0,
+        total,
+        reviewCount: 0, remembered: 0, forgotten: 0, lastReviewAgo: ''
+      };
+    }
+    
     const history = current.history || [];
     const reviewCount = history.length;
     let remembered = 0, forgotten = 0, lastReviewAgo = '';
@@ -250,12 +252,8 @@ Page({
       }
     }
     return {
-      index,
-      total,
-      reviewCount,
-      remembered,
-      forgotten,
-      lastReviewAgo
+      index, total,
+      reviewCount, remembered, forgotten, lastReviewAgo
     };
   },
 

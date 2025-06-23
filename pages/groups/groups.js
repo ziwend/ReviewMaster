@@ -25,8 +25,8 @@ Page({
     const groups = storage.getAllGroups().map(g => ({
       id: g.id,
       name: g.name,
-      knowledgeCount: groupKnowledgeCountMap[g.id] !== undefined ? groupKnowledgeCountMap[g.id] : '...',
-      dueCount: '...'
+      knowledgeCount: g.knowledgeCount,
+      dueCount: 0 // 初始化
     }));
     this.setData({
       groups,
@@ -38,17 +38,13 @@ Page({
   },
 
   updateGroupStats: function () {
-    const now = Date.now();
     this.data.groups.forEach((group, index) => {
-      setTimeout(() => {
-        const all = storage.getGroupData(group.id) || [];
-        const dueCount = all.filter(k => k.nextReviewTime <= now && k.status !== 'mastered').length;
-        groupKnowledgeCountMap[group.id] = all.length; // 更新缓存
-        this.setData({
-          [`groups[${index}].knowledgeCount`]: all.length,
-          [`groups[${index}].dueCount`]: dueCount
-        });
-      }, 0);
+      // 每次都刷新今日批次
+      storage.resetTodayReviewListIfNeeded(group.id);
+      const todayList = storage.getTodayReviewList(group.id);
+      this.setData({
+        [`groups[${index}].dueCount`]: todayList.length
+      });
     });
   },
 
@@ -96,4 +92,5 @@ Page({
       url: `/pages/review/review?groupId=${id}`
     });
   }
+  // ... rest of the existing code ...
 });

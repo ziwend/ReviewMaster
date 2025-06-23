@@ -27,14 +27,14 @@
   </view>
 
   <!-- 底部操作 -->
-  <view class="bottom-actions">
-    <view class="btn-wrapper btn-primary {{importing ? 'disabled' : ''}}">
-      <view class="btn-text">{{importing ? '导入中...' : '从输入框导入'}}</view>
-      <button class="btn-action" bindtap="startImportFromTextarea" disabled="{{importing}}"></button>
+  <view class="bottom-actions" wx:if="{{!importing}}">
+    <view class="btn-wrapper btn-primary">
+      <view class="btn-text">从输入框导入</view>
+      <button class="btn-action" bindtap="startImportFromTextarea"></button>
     </view>
-    <view class="btn-wrapper btn-secondary {{importing ? 'disabled' : ''}}">
-      <view class="btn-text">从文件导入输入框</view>
-      <button class="btn-action" bindtap="importFromTxt" disabled="{{importing}}"></button>
+    <view class="btn-wrapper btn-secondary">
+      <view class="btn-text">从文件导入</view>
+      <button class="btn-action" bindtap="importFromTxt"></button>
     </view>
   </view>
 </view>

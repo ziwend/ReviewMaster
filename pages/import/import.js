@@ -62,10 +62,10 @@ Page({
       const res = await wx.chooseMessageFile({
         count: 1,
         type: 'file',
-        extension: ['txt'],
+        extension: ['json'], // 只允许选择json文件
       });
       const path = res.tempFiles[0].path;
-      await this.readFileAndImport(path);
+      await this.readFileAndImport(path, true); // 传入isJson=true
     } catch (err) {
       if (err.errMsg && err.errMsg.includes('cancel')) {
         return;
@@ -78,7 +78,7 @@ Page({
     }
   },
 
-  async readFileAndImport(path) {
+  async readFileAndImport(path, isJson = false) {
     const fs = wx.getFileSystemManager();
     try {
       const content = await new Promise((resolve, reject) => {
@@ -89,15 +89,25 @@ Page({
           fail: reject
         });
       });
-      this.setData({ content });
-      wx.showToast({
-        title: '文件内容已加载',
-        icon: 'none'
-      });
+
+      if (isJson) {
+        const jsonData = JSON.parse(content);
+        const knowledgeList = Object.keys(jsonData).map(key => ({
+          question: key,
+          answer: jsonData[key]
+        }));
+        this.startImport(knowledgeList);
+      } else {
+        this.setData({ content });
+        wx.showToast({
+          title: '文件内容已加载',
+          icon: 'none'
+        });
+      }
     } catch (e) {
-      console.error("读取文件失败", e);
+      console.error("读取或解析文件失败", e);
       wx.showToast({
-        title: '读取文件失败',
+        title: '文件格式错误或读取失败',
         icon: 'none'
       });
     }
@@ -108,13 +118,11 @@ Page({
     this.startImport(this.data.content);
   },
 
-  async startImport(fullContent) {
-
+  async startImport(content) {
     if (this.data.importing) {
       wx.showToast({ title: '正在导入中...', icon: 'none' });
       return;
     }
-
     if (!this.data.selectedGroupId) {
       wx.showToast({
         title: '请先选择或新建一个分组',
@@ -122,8 +130,18 @@ Page({
       });
       return;
     }
-    const lines = fullContent.split('\n').filter(line => line.trim() !== '');
-    if (lines.length === 0) {
+    
+    let itemsToImport;
+    if (typeof content === 'string') {
+      itemsToImport = content.split('\n').filter(line => line.trim() !== '');
+    } else if (Array.isArray(content)) {
+      itemsToImport = content;
+    } else {
+      wx.showToast({ title: '导入内容格式不正确', icon: 'none' });
+      return;
+    }
+    
+    if (itemsToImport.length === 0) {
       wx.showToast({
         title: '内容不能为空',
         icon: 'none'
@@ -137,13 +155,13 @@ Page({
       progress: 0,
     });
     
-    await this.processInBatches(lines, this.data.selectedGroupId);
+    await this.processInBatches(itemsToImport, this.data.selectedGroupId);
   },
 
-  async processInBatches(lines, groupId) {
+  async processInBatches(items, groupId) {
     const BATCH_SIZE = 100;
     let currentIndex = 0;
-    const totalLines = lines.length;
+    const totalItems = items.length;
     let totalAdded = 0;
 
     // 引入 groups 页的缓存对象
@@ -155,35 +173,32 @@ Page({
       groupKnowledgeCountMap = {};
     }
 
-    while (currentIndex < totalLines) {
-      const batchLines = lines.slice(currentIndex, currentIndex + BATCH_SIZE);
-      const knowledgeBatch = batchLines.map(line => {
-        const parts = line.split(/\t|\|\|\|/);
-        const question = parts[0] ? parts[0].trim() : '';
-        const answer = parts.length > 1 ? parts.slice(1).join(' ').trim() : '';
+    while (currentIndex < totalItems) {
+      const batchItems = items.slice(currentIndex, currentIndex + BATCH_SIZE);
+      const knowledgeBatch = batchItems.map(item => {
+        let question, answer;
+        if (typeof item === 'string') {
+          const parts = item.split(/\t|\|\|\|/);
+          question = parts[0] ? parts[0].trim() : '';
+          answer = parts.length > 1 ? parts.slice(1).join(' ').trim() : '';
+        } else if (typeof item === 'object' && item.question) {
+          question = item.question;
+          answer = item.answer;
+        }
         return {
-          question,
-          answer,
-          groupId: groupId,
-          addTime: Date.now(),
-          nextReviewTime: Date.now(),
-          reviewCount: 0,
-          history: [],
-          status: 'pending'
+          question, answer,
+          groupId: groupId, addTime: Date.now(), nextReviewTime: Date.now(),
+          reviewCount: 0, history: [], status: 'pending'
         };
       }).filter(item => item.question);
 
       if (knowledgeBatch.length > 0) {
         await storage.addKnowledgeBatchToGroup(groupId, knowledgeBatch);
-        // 动态维护缓存
-        if (groupKnowledgeCountMap) {
-          groupKnowledgeCountMap[groupId] = (groupKnowledgeCountMap[groupId] || 0) + knowledgeBatch.length;
-        }
         totalAdded += knowledgeBatch.length;
       }
 
       currentIndex += BATCH_SIZE;
-      const progress = Math.min(100, Math.round((currentIndex / totalLines) * 100));
+      const progress = Math.min(100, Math.round((currentIndex / totalItems) * 100));
 
       this.setData({ progress });
       await new Promise(resolve => setTimeout(resolve, 50));
@@ -196,17 +211,17 @@ Page({
     });
 
     await new Promise(resolve => {
-      wx.showModal({
-        title: '导入完成',
-        content: `成功导入 ${totalLines} 个知识点。`,
-        showCancel: false,
-        success: () => {
-          wx.navigateTo({
-            url: `/pages/review/review?groupId=${groupId}`
-          });
-          resolve();
-        }
+  wx.showModal({
+    title: '导入完成',
+    content: `成功导入 ${totalAdded} 个知识点。`,
+    showCancel: false,
+    success: () => {
+      wx.navigateTo({
+        url: `/pages/review/review?groupId=${groupId}`
       });
+      resolve();
+    }
+  });
     });
   }
 })

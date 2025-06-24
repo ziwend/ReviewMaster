@@ -1,19 +1,13 @@
 const storage = require('../../utils/storage')
 
-// 艾宾浩斯复习间隔（分钟）
-// 基于记忆强度的自适应间隔算法
-function calculateNextInterval(memoryStrength, difficulty, currentInterval) {
-  // 基础调整因子 (记忆强度越高，间隔增长越快)
-  const strengthFactor = 1 + (memoryStrength / 100);
-  // 难度调整因子 (难度越高，间隔增长越慢)
-  const difficultyFactor = 1.5 - (difficulty * 0.1);
-  // 计算新间隔
-  let newInterval = currentInterval * strengthFactor * difficultyFactor;
-  
-  // 确保间隔在合理范围内 (5分钟到60天)
-  return Math.max(5, Math.min(newInterval, 60*24*60));
-}
 const BATCH_SIZE = 20; // 每天最大复习数
+
+// 新增：反馈分数映射（可根据实际UI调整）
+const FEEDBACK_SCORE = {
+  'remember': 5, // 记住了
+  'vague': 3,   // 模糊
+  'forget': 1   // 没记住
+};
 
 Page({
   data: {
@@ -27,7 +21,8 @@ Page({
     loading: true,
     isBatchCompleted: false, // 新增：是否完成一个批次
     touchStartX: 0,
-    touchDeltaX: 0
+    touchDeltaX: 0,
+    showDeleteButton: false
   },
 
   // 用于存储完整复习列表和当前进度
@@ -45,6 +40,11 @@ Page({
 
     const currentGroup = groups.find(g => g.id == groupId) || (groups && groups[0]) || {};
     
+    // 设置导航栏标题为分组名
+    if (currentGroup && currentGroup.name) {
+      wx.setNavigationBarTitle({ title: currentGroup.name });
+    }
+
     this.setData({
       groups: groups || [],
       groupId: groupId,
@@ -100,58 +100,44 @@ Page({
     });
   },
 
-  async markResult(e) {
-    const result = e.currentTarget.dataset.result === 'true'
-    let { current } = this.data
-    if (!current) return
-
-    // 清除可能存在的上一个定时器
-    if (this.timerId) {
-      clearTimeout(this.timerId);
-      this.timerId = null;
-    }
-
-    // 记录历史
-    current.history.push({ time: Date.now(), result })
-
-    // 更新记忆强度和难度
-    if (result) {
-      // 回答正确：提高记忆强度，降低难度
-      current.memoryStrength = Math.min(100, current.memoryStrength + 15 + (current.difficulty * 2));
-      current.difficulty = Math.max(1, current.difficulty - 0.1);
-    } else {
-      // 回答错误：降低记忆强度，提高难度
-      current.memoryStrength = Math.max(0, current.memoryStrength - 25 - (current.difficulty * 3));
-      current.difficulty = Math.min(5, current.difficulty + 0.2);
-    }
-    
-    // 计算下次复习间隔
-    current.lastInterval = calculateNextInterval(
-      current.memoryStrength, 
-      current.difficulty, 
-      current.lastInterval || 5 // 初始间隔5分钟
-    );
-    
-    current.nextReviewTime = Date.now() + current.lastInterval * 60 * 1000;
-    
-    // 更新状态
-    current.reviewCount += 1;
-    if (current.memoryStrength >= 95) {
+  // 统一处理复习反馈
+  handleReviewFeedback(type) {
+    let quality = FEEDBACK_SCORE[type] || 0;
+    let { current } = this.data;
+    if (!current) return;
+    // 判断是否显示删除按钮
+    let showDeleteButton = (type === 'remember');
+    this.setData({ showDeleteButton, showResult: true });
+    // 使用SM-2算法更新知识点
+    current = storage.updateKnowledgeBySM2(current, quality);
+    // 状态判断
+    if (current.efactor >= 2.5 && current.repetition >= 5) {
       current.status = 'mastered';
-    } else if (current.memoryStrength >= 50) {
+    } else if (current.efactor >= 2.0) {
       current.status = 'reviewing';
     } else {
       current.status = 'pending';
     }
-    
-    await storage.saveKnowledge(current);
-    this.setData({ showResult: true });
-    
+    storage.saveKnowledge(current);
     // 设置自动翻页定时器
-    const delay = result ? 10000 : 30000; // 记得10秒，不记得30秒
+    const delay = quality >= 3 ? 10000 : 30000;
+    if (this.timerId) clearTimeout(this.timerId);
     this.timerId = setTimeout(() => {
       this.nextOne();
     }, delay);
+  },
+
+  // markResult 统一调用
+  async markResult(e) {
+    const type = e.currentTarget.dataset.result;
+    this.handleReviewFeedback(type);
+  },
+
+  // markResultBySwipe 统一调用
+  markResultBySwipe(result) {
+    // result: true/false
+    const type = result ? 'remember' : 'forget';
+    this.handleReviewFeedback(type);
   },
 
   nextOne() {
@@ -169,14 +155,46 @@ Page({
       this.setData({
         currentIndex: currentIndex,
         current: current,
-        showResult: false
+        showResult: false,
+        showDeleteButton: false
       });
     } else {
       this.setData({
         current: null,
         currentIndex: -1,
         reviewList: [],
-        isBatchCompleted: true
+        isBatchCompleted: true,
+        showResult: false,
+        showDeleteButton: false
+      });
+    }
+  },
+
+  prevOne() {
+    let { currentIndex, reviewList } = this.data;
+    if (currentIndex > 0) {
+      currentIndex--;
+      let current = reviewList[currentIndex];
+      
+      let showResult = false;
+      let showDeleteButton = false;
+
+      if (current.history && current.history.length > 0) {
+        const lastAction = current.history[current.history.length - 1];
+        // 假设history里存有quality
+        if (lastAction && lastAction.quality) {
+          showResult = true;
+          showDeleteButton = lastAction.quality >= 5;
+        }
+      }
+
+      if (current) current.lastRememberAgo = getLastRememberAgo(current);
+      
+      this.setData({
+        currentIndex,
+        current,
+        showResult,
+        showDeleteButton
       });
     }
   },
@@ -240,7 +258,8 @@ Page({
             reviewList: newList,
             current: newCurrent,
             currentIndex: newIndex,
-            showResult: false
+            showResult: false,
+            showDeleteButton: false
           });
           wx.showToast({ title: '已删除', icon: 'success' });
         }
@@ -262,21 +281,15 @@ Page({
   onTouchEnd(e) {
     const threshold = 60; // 滑动阈值(px)
     if (this.touchDeltaX <= -threshold) {
-      // 向左滑动，没记住
-      this.markResultBySwipe(false);
+      // 左滑，下一题
+      this.nextOne();
     } else if (this.touchDeltaX >= threshold) {
-      // 向右滑动，记住了
-      this.markResultBySwipe(true);
+      // 右滑，上一题
+      this.prevOne();
     }
     // 重置
     this.touchStartX = 0;
     this.touchDeltaX = 0;
-  },
-
-  markResultBySwipe(result) {
-    // 复用 markResult 逻辑
-    const e = { currentTarget: { dataset: { result: String(result) } } };
-    this.markResult(e);
   }
 })
 

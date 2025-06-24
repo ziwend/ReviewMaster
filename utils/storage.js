@@ -20,7 +20,6 @@
  *   reviewCount: Number,  
  *   history: Array,       
  *   status: String,       
- *   memoryStrength: Number,
  *   difficulty: Number,   
  *   lastInterval: Number  
  * }
@@ -153,18 +152,12 @@ async function addKnowledgeBatchToGroup(groupId, knowledgeBatch) {
   await processInChunks(knowledgeBatch, async (knowledge) => {
     const newKnowledgeId = nextId;
     knowledge.id = newKnowledgeId;
-    
     // 初始化所有字段
-    knowledge.media = knowledge.media || []; 
-    knowledge.memoryStrength = knowledge.memoryStrength || 0;
+    knowledge.media = knowledge.media || [];
     knowledge.difficulty = knowledge.difficulty || 3;
-    knowledge.lastInterval = knowledge.lastInterval || 0;
-    knowledge.status = knowledge.status || 'pending';
-    knowledge.reviewCount = knowledge.reviewCount || 0;
-    knowledge.history = knowledge.history || [];
     knowledge.addTime = knowledge.addTime || Date.now();
     knowledge.nextReviewTime = knowledge.nextReviewTime || Date.now();
-    
+    knowledge.learned = typeof knowledge.learned === 'boolean' ? knowledge.learned : false;
     wx.setStorageSync(`knowledge-${newKnowledgeId}`, knowledge);
     newIds.push(newKnowledgeId);
     nextId++;
@@ -196,6 +189,7 @@ function saveKnowledge(knowledge) {
     console.error('saveKnowledge failed: knowledge or knowledge.id is missing', knowledge);
     return;
   }
+  if (typeof knowledge.learned !== 'boolean') knowledge.learned = false;
   const key = `knowledge-${knowledge.id}`;
   wx.setStorageSync(key, knowledge);
 }
@@ -243,7 +237,7 @@ function getTodayReviewList(groupId, batchSize = 20) {
     console.log('[getTodayReviewList] 命中缓存:', key, cache);
     return cache.ids
       .map(id => getKnowledgeById(id))
-      .filter(k => k && k.status !== 'mastered' && k.nextReviewTime <= Date.now());
+      .filter(k => k && k.status !== 'mastered' && k.nextReviewTime <= Date.now() && k.learned);
   }
   // 生成今日批次
   const all = getGroupData(groupId) || [];
@@ -254,11 +248,11 @@ function getTodayReviewList(groupId, batchSize = 20) {
     return [];
   }
   // 1. 先选due的
-  const due = all.filter(k => k.nextReviewTime <= now && k.status !== 'mastered');
+  const due = all.filter(k => k.nextReviewTime <= now && k.status !== 'mastered' && k.learned);
   // 2. 不足补未复习的
   let batch = due.slice(0, batchSize);
   if (batch.length < batchSize) {
-    const notReviewed = all.filter(k => (!k.history || k.history.length === 0) && !batch.includes(k));
+    const notReviewed = all.filter(k => (!k.history || k.history.length === 0) && !batch.includes(k) && k.learned);
     batch = batch.concat(notReviewed.slice(0, batchSize - batch.length));
   }
   // 只取id
@@ -294,6 +288,57 @@ function resetTodayReviewListIfNeeded(groupId) {
   }
 }
 
+// SM-2算法实现
+function updateKnowledgeBySM2(knowledge, quality) {
+  // quality: 0-5，5为完全记住，3为勉强记住，0为完全忘记
+  if (typeof knowledge.efactor !== 'number') knowledge.efactor = 2.5;
+  if (typeof knowledge.interval !== 'number') knowledge.interval = 0;
+  if (typeof knowledge.repetition !== 'number') knowledge.repetition = 0;
+
+  if (quality < 3) {
+    // 回归初始，间隔重置为5分钟
+    knowledge.repetition = 0;
+    knowledge.interval = 5 / (24 * 60); // 5分钟，单位天
+  } else {
+    knowledge.repetition += 1;
+    if (knowledge.repetition === 1) {
+      knowledge.interval = 5 / (24 * 60); // 5分钟
+    } else if (knowledge.repetition === 2) {
+      knowledge.interval = 30 / (24 * 60); // 30分钟
+    } else if (knowledge.repetition === 3) {
+      knowledge.interval = 0.5; // 12小时
+    } else if (knowledge.repetition === 4) {
+      knowledge.interval = 1; // 1天
+    } else if (knowledge.repetition === 5) {
+      knowledge.interval = 6; // 6天
+    } else {
+      knowledge.interval = Math.round(knowledge.interval * knowledge.efactor);
+    }
+  }
+  // 更新efactor
+  knowledge.efactor = knowledge.efactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+  if (knowledge.efactor < 1.3) knowledge.efactor = 1.3;
+
+  // 计算下次复习时间
+  knowledge.nextReviewTime = Date.now() + knowledge.interval * 24 * 60 * 60 * 1000;
+
+  // 记录历史
+  if (!Array.isArray(knowledge.history)) knowledge.history = [];
+  knowledge.history.push({
+    time: Date.now(),
+    quality,
+    interval: knowledge.interval,
+    efactor: knowledge.efactor
+  });
+
+  return knowledge;
+}
+
+function getUnlearnedKnowledge(groupId) {
+  const all = getGroupData(groupId) || [];
+  return all.filter(k => !k.learned);
+}
+
 module.exports = {
   getAllGroups,
   addGroup,
@@ -307,4 +352,6 @@ module.exports = {
   getTodayReviewList,
   cleanEmptyTodayReviewListCache,
   resetTodayReviewListIfNeeded,
+  updateKnowledgeBySM2,
+  getUnlearnedKnowledge,
 };

@@ -6,28 +6,22 @@
   <!-- 复习卡片 -->
   <block wx:elif="{{current}}">
     <view class="review-header">
-      <view class="page-title">{{currentGroup.name}}</view>
+
       <view class="stat-bar">
         <view class="stat-row main-row">
           <text>第{{currentIndex+1}}/{{reviewList.length}}题</text>
           <block wx:if="{{current.lastRememberAgo}}">
             <text class="last-remember-label">最后记住：{{current.lastRememberAgo}}</text>
           </block>
-          <text class="memory-strength-label-inline">记忆强度：{{current.memoryStrength}}%</text>
-        </view>
-        <view class="memory-indicator-bar">
-          <view class="memory-strength-bar" style="width: {{current.memoryStrength}}%;"></view>
         </view>
       </view>
     </view>
-    <view class="review-card card">
-      <block wx:if="{{!showResult}}">
-        <view 
-          class="question-text only-question"
+    <view class="review-card card" 
           bindtouchstart="onTouchStart"
           bindtouchmove="onTouchMove"
-          bindtouchend="onTouchEnd"
-        >
+          bindtouchend="onTouchEnd">
+      <block wx:if="{{!showResult}}">
+        <view class="question-text only-question">
           {{current.question}}
         </view>
       </block>
@@ -43,20 +37,24 @@
     <!-- 操作按钮 -->
     <view class="action-buttons">
       <block wx:if="{{!showResult}}">
-        <view class="btn-wrapper btn-danger" bindtap="markResult" data-result="false">
+        <view class="btn-wrapper btn-danger" bindtap="markResult" data-result="forget">
           <view class="btn-text">没记住</view>
         </view>
-        <view class="btn-wrapper btn-delete" bindtap="deleteCurrentKnowledge">
-          <view class="btn-text">删除</view>
+        <view class="btn-wrapper btn-warning" bindtap="markResult" data-result="vague">
+          <view class="btn-text">模糊</view>
         </view>
-        <view class="btn-wrapper btn-primary" bindtap="markResult" data-result="true">
+        <view class="btn-wrapper btn-primary" bindtap="markResult" data-result="remember">
           <view class="btn-text">记住了</view>
         </view>
       </block>
       <block wx:else>
-        <view class="btn-wrapper btn-primary next-btn" bindtap="nextOne">
-          <view class="btn-text">下一个</view>
-        </view>
+
+          <block wx:if="{{showDeleteButton}}">
+            <view class="btn-wrapper btn-delete" bindtap="deleteCurrentKnowledge">
+              <view class="btn-text">删除</view>
+            </view>
+          </block>
+
       </block>
     </view>
   </block>

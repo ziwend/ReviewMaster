@@ -1,10 +1,10 @@
 {
   "pages": [
+    "pages/index/index",
     "pages/groups/groups",
     "pages/import/import",
     "pages/review/review",
-    "pages/mastered/mastered",
-    "pages/index/index"
+    "pages/mastered/mastered"
   ],
   "window": {
     "backgroundTextStyle": "light",

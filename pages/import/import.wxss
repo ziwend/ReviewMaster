@@ -31,6 +31,7 @@
 }
 
 .picker-display {
+  width: 50vw; /* 屏幕一半宽度 */
   display: flex;
   justify-content: space-between;
   align-items: center;

@@ -1,6 +1,4 @@
 <view class="container">
-  <view class="page-title">知识分组</view>
-
   <!-- 加载中状态 -->
   <view wx:if="{{loading}}" class="loading">加载中...</view>
 

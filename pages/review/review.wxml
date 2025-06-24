@@ -9,25 +9,27 @@
       <view class="page-title">{{currentGroup.name}}</view>
       <view class="stat-bar">
         <view class="stat-row main-row">
-          <text>第{{currentStat.index}}/{{currentStat.total}}题</text>
+          <text>第{{currentIndex+1}}/{{reviewList.length}}题</text>
+          <block wx:if="{{current.lastRememberAgo}}">
+            <text class="last-remember-label">最后记住：{{current.lastRememberAgo}}</text>
+          </block>
           <text class="memory-strength-label-inline">记忆强度：{{current.memoryStrength}}%</text>
         </view>
         <view class="memory-indicator-bar">
           <view class="memory-strength-bar" style="width: {{current.memoryStrength}}%;"></view>
         </view>
-        <view class="stat-row sub-row">
-          <text>已复习{{currentStat.reviewCount}}次</text>
-          <text>　记住{{currentStat.remembered}}次</text>
-          <text>　没记住{{currentStat.forgotten}}次</text>
-        </view>
-        <view class="stat-row sub-row">
-          <text wx:if="{{currentStat.reviewCount > 0}}">最近复习：{{currentStat.lastReviewAgo}}</text>
-        </view>
       </view>
     </view>
     <view class="review-card card">
       <block wx:if="{{!showResult}}">
-        <view class="question-text only-question">{{current.question}}</view>
+        <view 
+          class="question-text only-question"
+          bindtouchstart="onTouchStart"
+          bindtouchmove="onTouchMove"
+          bindtouchend="onTouchEnd"
+        >
+          {{current.question}}
+        </view>
       </block>
       <block wx:elif="{{showResult}}">
         <view class="question-text">{{current.question}}</view>

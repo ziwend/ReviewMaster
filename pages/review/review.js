@@ -26,14 +26,8 @@ Page({
     showResult: false,
     loading: true,
     isBatchCompleted: false, // 新增：是否完成一个批次
-    currentStat: {
-      index: 0,
-      total: 0,
-      reviewCount: 0,
-      remembered: 0,
-      forgotten: 0,
-      lastReviewAgo: ''
-    }
+    touchStartX: 0,
+    touchDeltaX: 0
   },
 
   // 用于存储完整复习列表和当前进度
@@ -61,6 +55,7 @@ Page({
     if (groupId) {
       await this.loadReviewList();
       console.log("review执行loadReviewList，groupId=", groupId);
+      console.log('导入后分组知识点：', storage.getGroupData(groupId));
     } else {
       this.setData({ loading: false });
     }
@@ -80,9 +75,11 @@ Page({
       this.setData({ loading: false });
       return;
     }
-    // 每次都刷新今日批次
     storage.resetTodayReviewListIfNeeded(groupId);
     const todayList = storage.getTodayReviewList(groupId, BATCH_SIZE);
+    console.log("review执行loadReviewList, todayList=", todayList);
+    console.log('当前分组知识点：', storage.getGroupData(groupId));
+    console.log('todayList =', todayList);
     if (todayList.length === 0) {
       this.setData({
         reviewList: [],
@@ -90,17 +87,17 @@ Page({
         currentIndex: -1,
         loading: false
       });
-      this.updateCurrentStat();
       return;
     }
+    let current = todayList[0];
+    if (current) current.lastRememberAgo = getLastRememberAgo(current);
     this.setData({
       reviewList: todayList,
-      current: todayList[0],
+      current: current,
       currentIndex: 0,
       isBatchCompleted: false,
       loading: false
     });
-    this.updateCurrentStat();
   },
 
   async markResult(e) {
@@ -148,9 +145,7 @@ Page({
     }
     
     await storage.saveKnowledge(current);
-    this.setData({ showResult: true }, () => {
-      this.updateCurrentStat();
-    });
+    this.setData({ showResult: true });
     
     // 设置自动翻页定时器
     const delay = result ? 10000 : 30000; // 记得10秒，不记得30秒
@@ -165,27 +160,24 @@ Page({
       clearTimeout(this.timerId);
       this.timerId = null;
     }
-    
     let { currentIndex, reviewList } = this.data;
     currentIndex++;
-    
-    // 如果当前批次还没完成
     if (currentIndex < reviewList.length) {
-      this.globalIndex++; // 全局进度加一
+      this.globalIndex++;
+      let current = reviewList[currentIndex];
+      if (current) current.lastRememberAgo = getLastRememberAgo(current);
       this.setData({
         currentIndex: currentIndex,
-        current: reviewList[currentIndex],
+        current: current,
         showResult: false
-      }, () => this.updateCurrentStat());
+      });
     } else {
-      // 今日批次已完成
       this.setData({
         current: null,
         currentIndex: -1,
         reviewList: [],
         isBatchCompleted: true
       });
-      this.updateCurrentStat();
     }
   },
 
@@ -219,49 +211,6 @@ Page({
     }
   },
 
-  // 计算当前知识点的统计信息
-  computeCurrentStat() {
-    const { current, reviewList, currentIndex } = this.data;
-    const total = reviewList.length; // 本批数量
-    const index = currentIndex + 1;
-    if (!current) {
-      return {
-        index: 0,
-        total,
-        reviewCount: 0, remembered: 0, forgotten: 0, lastReviewAgo: ''
-      };
-    }
-    
-    const history = current.history || [];
-    const reviewCount = history.length;
-    let remembered = 0, forgotten = 0, lastReviewAgo = '';
-    if (reviewCount > 0) {
-      remembered = history.filter(h => h.result).length;
-      forgotten = history.filter(h => !h.result).length;
-      const last = history[history.length - 1];
-      const now = Date.now();
-      const diff = now - last.time;
-      if (diff < 60 * 1000) {
-        lastReviewAgo = Math.floor(diff / 1000) + '秒前';
-      } else if (diff < 60 * 60 * 1000) {
-        lastReviewAgo = Math.floor(diff / 60000) + '分钟前';
-      } else if (diff < 24 * 60 * 60 * 1000) {
-        lastReviewAgo = Math.floor(diff / 3600000) + '小时前';
-      } else {
-        lastReviewAgo = Math.floor(diff / 86400000) + '天前';
-      }
-    }
-    return {
-      index, total,
-      reviewCount, remembered, forgotten, lastReviewAgo
-    };
-  },
-
-  // 在切换题目、加载数据后都更新统计
-  updateCurrentStat() {
-    this.setData({ currentStat: this.computeCurrentStat() });
-  },
-
   async deleteCurrentKnowledge() {
     const { current, groupId, reviewList, currentIndex } = this.data;
     if (!current || !groupId) return;
@@ -271,10 +220,8 @@ Page({
       content: '确定要彻底删除该知识点吗？此操作不可撤销。',
       success: async (res) => {
         if (res.confirm) {
-          // 删除本地存储
           const storage = require('../../utils/storage');
           await storage.removeKnowledge(groupId, current.id);
-          // 更新 groupKnowledgeCountMap 缓存（如有）
           try {
             const app = getApp();
             if (app.globalData && app.globalData.groupKnowledgeCountMap) {
@@ -282,24 +229,67 @@ Page({
               map[groupId] = Math.max(0, (map[groupId] || 1) - 1);
             }
           } catch (e) {}
-          // 从 reviewList 移除
           const newList = reviewList.filter(k => k.id !== current.id);
           let newCurrent = null, newIndex = -1;
           if (newList.length > 0) {
             newIndex = Math.min(currentIndex, newList.length - 1);
             newCurrent = newList[newIndex];
+            if (newCurrent) newCurrent.lastRememberAgo = getLastRememberAgo(newCurrent);
           }
           that.setData({
             reviewList: newList,
             current: newCurrent,
             currentIndex: newIndex,
             showResult: false
-          }, () => {
-            that.updateCurrentStat();
           });
           wx.showToast({ title: '已删除', icon: 'success' });
         }
       }
     });
+  },
+
+  onTouchStart(e) {
+    this.touchStartX = e.touches[0].clientX;
+    this.touchDeltaX = 0;
+  },
+
+  onTouchMove(e) {
+    const moveX = e.touches[0].clientX;
+    this.touchDeltaX = moveX - this.touchStartX;
+    // 可选：可在此处做视觉反馈
+  },
+
+  onTouchEnd(e) {
+    const threshold = 60; // 滑动阈值(px)
+    if (this.touchDeltaX <= -threshold) {
+      // 向左滑动，没记住
+      this.markResultBySwipe(false);
+    } else if (this.touchDeltaX >= threshold) {
+      // 向右滑动，记住了
+      this.markResultBySwipe(true);
+    }
+    // 重置
+    this.touchStartX = 0;
+    this.touchDeltaX = 0;
+  },
+
+  markResultBySwipe(result) {
+    // 复用 markResult 逻辑
+    const e = { currentTarget: { dataset: { result: String(result) } } };
+    this.markResult(e);
   }
 })
+
+// 新增：计算最后一次记住时间的工具函数
+function getLastRememberAgo(current) {
+  if (!current || !current.history || current.history.length === 0) return '';
+  // 找到最后一次记住的历史
+  const lastRemember = (current.history || []).slice().reverse().find(h => h.result);
+  if (!lastRemember) return '';
+  const now = Date.now();
+  const diff = now - lastRemember.time;
+  if (diff < 60 * 1000) return Math.floor(diff / 1000) + '秒前';
+  if (diff < 60 * 60 * 1000) return Math.floor(diff / 60000) + '分钟前';
+  if (diff < 24 * 60 * 60 * 1000) return Math.floor(diff / 3600000) + '小时前';
+  return Math.floor(diff / 86400000) + '天前';
+}

@@ -187,8 +187,9 @@ Page({
         }
         return {
           question, answer,
-          groupId: groupId, addTime: Date.now(), nextReviewTime: Date.now(),
-          reviewCount: 0, history: [], status: 'pending'
+          groupId: groupId, addTime: Date.now(), nextReviewTime: Date.now() - 1000,
+          reviewCount: 0, history: [], status: 'pending',
+          memoryStrength: 0, difficulty: 3, lastInterval: 0
         };
       }).filter(item => item.question);
 
@@ -210,18 +211,23 @@ Page({
       content: ''
     });
 
+    // 导入完成后，主动生成今日复习批次
+    storage.getTodayReviewList(groupId, 20);
+
     await new Promise(resolve => {
-  wx.showModal({
-    title: '导入完成',
-    content: `成功导入 ${totalAdded} 个知识点。`,
-    showCancel: false,
-    success: () => {
-      wx.navigateTo({
-        url: `/pages/review/review?groupId=${groupId}`
+      wx.showModal({
+        title: '导入完成',
+        content: `成功导入 ${totalAdded} 个知识点。`,
+        showCancel: false,
+        success: async () => {
+          // 跳转前加延迟，确保本地存储和批次写入完成
+          await new Promise(r => setTimeout(r, 200));
+          wx.navigateTo({
+            url: `/pages/review/review?groupId=${groupId}`
+          });
+          resolve();
+        }
       });
-      resolve();
-    }
-  });
     });
   }
 })

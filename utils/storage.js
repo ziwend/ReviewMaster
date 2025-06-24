@@ -4,7 +4,7 @@
 /**
  * Key-Value Structure:
  * 
- * 'groups': Array<Object> - [{id: 1, name: 'Group Name', knowledge极Count: 10}]
+ * 'groups': Array<Object> - [{id: 1, name: 'Group Name', knowledgeCount: 10}]
  * 'nextGroupId': Number - e.g., 2
  * 'nextKnowledgeId': Number - e.g., 101
  * 
@@ -40,7 +40,7 @@ function getNextId(key) {
 }
 
 // 分块处理函数
-async function process极Chunks(items, processFn, chunkSize = 50) {
+async function processInChunks(items, processFn, chunkSize = 50) {
   for (let i = 0; i < items.length; i += chunkSize) {
     const chunk = items.slice(i, i + chunkSize);
     await Promise.all(chunk.map(processFn));
@@ -206,7 +206,7 @@ function removeKnowledge(groupId, knowledgeId) {
 
   // 2. 从分组索引中删除
   const groupKey = `group-${groupId}`;
-  let knowledgeIds = wx.getStorageSync(group极Key) || [];
+  let knowledgeIds = wx.getStorageSync(groupKey) || [];
   knowledgeIds = knowledgeIds.filter(id => id !== knowledgeId);
   wx.setStorageSync(groupKey, knowledgeIds);
 
@@ -239,15 +239,20 @@ function getTodayReviewList(groupId, batchSize = 20) {
   const today = getTodayStr();
   let cache = wx.getStorageSync(key);
   if (cache && cache.date === today && Array.isArray(cache.ids)) {
-    // 今日已生成，动态过滤：只保留当前依然 due 且未掌握的题
-    const now = Date.now();
+    // 命中缓存
+    console.log('[getTodayReviewList] 命中缓存:', key, cache);
     return cache.ids
       .map(id => getKnowledgeById(id))
-      .filter(k => k && k.status !== 'mastered' && k.nextReviewTime <= now);
+      .filter(k => k && k.status !== 'mastered' && k.nextReviewTime <= Date.now());
   }
   // 生成今日批次
   const all = getGroupData(groupId) || [];
   const now = Date.now();
+  if (all.length === 0) {
+    // 分组无知识点，不生成缓存
+    console.log('[getTodayReviewList] 分组无知识点，不生成缓存:', key);
+    return [];
+  }
   // 1. 先选due的
   const due = all.filter(k => k.nextReviewTime <= now && k.status !== 'mastered');
   // 2. 不足补未复习的
@@ -258,8 +263,24 @@ function getTodayReviewList(groupId, batchSize = 20) {
   }
   // 只取id
   const ids = batch.map(k => k.id);
-  wx.setStorageSync(key, { date: today, ids });
+  if (ids.length > 0) {
+    wx.setStorageSync(key, { date: today, ids });
+    console.log('[getTodayReviewList] 生成缓存:', key, { date: today, ids }, '知识点总数:', all.length);
+  } else {
+    // 不写入空缓存
+    console.log('[getTodayReviewList] batch为空，不写入缓存:', key);
+  }
   return batch;
+}
+
+// 清理历史空缓存
+function cleanEmptyTodayReviewListCache(groupId) {
+  const key = `todayReviewList-${groupId}`;
+  const cache = wx.getStorageSync(key);
+  if (cache && Array.isArray(cache.ids) && cache.ids.length === 0) {
+    wx.removeStorageSync(key);
+    console.log('[cleanEmptyTodayReviewListCache] 清理历史空缓存:', key);
+  }
 }
 
 // 日期变更时重置今日批次
@@ -269,6 +290,7 @@ function resetTodayReviewListIfNeeded(groupId) {
   let cache = wx.getStorageSync(key);
   if (!cache || cache.date !== today) {
     wx.removeStorageSync(key);
+    console.log('[resetTodayReviewListIfNeeded] 日期变更，重置今日复习缓存:', key);
   }
 }
 
@@ -283,5 +305,6 @@ module.exports = {
   getKnowledgeById,
   addKnowledgeBatchToGroup,
   getTodayReviewList,
+  cleanEmptyTodayReviewListCache,
   resetTodayReviewListIfNeeded,
 };

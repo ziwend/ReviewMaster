@@ -2,30 +2,30 @@
 <view class="container learn-container">
   <!-- 分组选择 -->
   <view class="group row-flex"> 
-    <picker bindchange="bindGroupChange" value="{{groupIndex}}" range="{{groups}}" range-key="name">
+    <picker bindchange="bindGroupChange" value="{{groupIndex}}" range="{{groups}}" range-key="displayName">
       <view class="picker-display row-flex">
-        <text>{{groups[groupIndex].name || '请选择分组'}}</text>
+        <text>{{groups[groupIndex].displayName || '请选择分组'}}</text>
         <image class="picker-arrow" src="/components/icons/arrow-down.svg" />
       </view>
     </picker>
-    <button class="group-btn" bindtap="toGroups">知识管理</button>
+    <view class="btn-wrapper-top group-btn" bindtap="toReviewPage">
+        <view >去复习</view>
+    </view>
+    <!-- <button class="group-btn" bindtap="toReviewPage">去复习</button> -->
   </view>
 
   <!-- 学习卡片 -->
   <block wx:if="{{current}}">
-    <view class="learn-header">
-      <view class="stat-bar">
-        <view class="stat-row main-row">
-          <text>第{{currentIndex+1}}/{{unlearnedList.length}}题</text>
-        </view>
-      </view>
-    </view>
+
     <view class="learn-card card" 
           bindtouchstart="onTouchStart"
           bindtouchmove="onTouchMove"
           bindtouchend="onTouchEnd">
       
-        <view class="question-text">{{current.question}}</view>
+        <view class="question-text">
+          <text class="question-index">{{currentIndex+1}}/{{unlearnedList.length}}</text>
+          <text>{{current.question}}</text>
+        </view>
         <view class="answer-section show">
           <view class="separator"></view>
           <view class="answer-text">{{current.answer}}</view>

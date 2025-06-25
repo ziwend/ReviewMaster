@@ -1,13 +1,21 @@
 const storage = require('../../utils/storage')
 
-const BATCH_SIZE = 20; // 每天最大复习数
-
-// 新增：反馈分数映射（可根据实际UI调整）
+// 常量定义
 const FEEDBACK_SCORE = {
-  'remember': 5, // 记住了
-  'vague': 3,   // 模糊
-  'forget': 1   // 没记住
+  REMEMBER: 5, // 记住了
+  VAGUE: 3,   // 模糊
+  FORGET: 1   // 没记住
 };
+
+// 时间格式化工具函数
+function formatTimeAgo(timestamp) {
+  const now = Date.now();
+  const diff = now - timestamp;
+  if (diff < 60 * 1000) return Math.floor(diff / 1000) + '秒前';
+  if (diff < 60 * 60 * 1000) return Math.floor(diff / 60000) + '分钟前';
+  if (diff < 24 * 60 * 60 * 1000) return Math.floor(diff / 3600000) + '小时前';
+  return Math.floor(diff / 86400000) + '天前';
+}
 
 Page({
   data: {
@@ -15,25 +23,22 @@ Page({
     groupId: null,
     currentGroup: {},
     reviewList: [],
-    currentIndex: -1, // 使用索引来跟踪当前卡片
+    currentIndex: -1,
     current: null,
     showResult: false,
     loading: true,
-    isBatchCompleted: false, // 新增：是否完成一个批次
+    isBatchCompleted: false,
     touchStartX: 0,
-    touchDeltaX: 0,
     showDeleteButton: false
   },
 
-  // 用于存储完整复习列表和当前进度
-  fullReviewList: [],
-  globalIndex: 0,
+  settings: {}, // 存储设置
 
   onLoad: async function(options) {
     this.timerId = null; // 初始化定时器ID
+    this.settings = storage.getSettings(); // 加载设置
     let { groupId } = options;
-    const groups = await storage.getAllGroups();
-    console.log("review执行getAllGroups，groupId=", groupId);
+    const groups = getApp().globalData.groups;
     if (!groupId && groups && groups.length > 0) {
       groupId = groups[0].id;
     }
@@ -54,14 +59,13 @@ Page({
 
     if (groupId) {
       await this.loadReviewList();
-      console.log("review执行loadReviewList，groupId=", groupId);
-      console.log('导入后分组知识点：', storage.getGroupData(groupId));
     } else {
       this.setData({ loading: false });
     }
   },
 
   onShow: async function() {
+    storage.refreshAllReviewLists();
     // 从其他页面返回时，可能需要刷新数据
     if (this.data.groupId) {
       this.setData({ loading: true });
@@ -75,12 +79,11 @@ Page({
       this.setData({ loading: false });
       return;
     }
-    storage.resetTodayReviewListIfNeeded(groupId);
-    const todayList = storage.getTodayReviewList(groupId, BATCH_SIZE);
-    console.log("review执行loadReviewList, todayList=", todayList);
-    console.log('当前分组知识点：', storage.getGroupData(groupId));
-    console.log('todayList =', todayList);
-    if (todayList.length === 0) {
+    // 只读缓存，不再刷新
+    const cache = wx.getStorageSync(`todayReviewList-${groupId}`);
+    const todayList = cache && Array.isArray(cache.ids) ? cache.ids : [];
+    const reviewList = todayList.map(id => storage.getKnowledgeById(id)).filter(Boolean);
+    if (reviewList.length === 0) {
       this.setData({
         reviewList: [],
         current: null,
@@ -89,10 +92,10 @@ Page({
       });
       return;
     }
-    let current = todayList[0];
+    let current = reviewList[0];
     if (current) current.lastRememberAgo = getLastRememberAgo(current);
     this.setData({
-      reviewList: todayList,
+      reviewList,
       current: current,
       currentIndex: 0,
       isBatchCompleted: false,
@@ -102,12 +105,23 @@ Page({
 
   // 统一处理复习反馈
   handleReviewFeedback(type) {
-    let quality = FEEDBACK_SCORE[type] || 0;
-    let { current } = this.data;
+    const quality = FEEDBACK_SCORE[type.toUpperCase()] || 0;
+    const { current } = this.data;
     if (!current) return;
-    // 判断是否显示删除按钮
-    let showDeleteButton = (type === 'remember');
-    this.setData({ showDeleteButton, showResult: true });
+    
+    this.setData({ 
+      showDeleteButton: type === 'remember',
+      showResult: true 
+    });
+    
+    // 首次复习时初始化算法字段
+    if (!current.learned) {
+      current.learned = true;
+      // 初始化SM-2算法字段
+      if (typeof current.repetition === 'undefined') current.repetition = 0;
+      if (typeof current.efactor === 'undefined') current.efactor = 2.5;
+    }
+    
     // 使用SM-2算法更新知识点
     current = storage.updateKnowledgeBySM2(current, quality);
     // 状态判断
@@ -119,8 +133,11 @@ Page({
       current.status = 'pending';
     }
     storage.saveKnowledge(current);
+    current.lastRememberAgo = this.getLastRememberAgo(current);
+    this.setData({ current });
     // 设置自动翻页定时器
-    const delay = quality >= 3 ? 10000 : 30000;
+    const delayInSeconds = quality >= 3 ? this.settings.delayRemember : this.settings.delayForget;
+    const delay = delayInSeconds * 1000; // 转换为毫秒
     if (this.timerId) clearTimeout(this.timerId);
     this.timerId = setTimeout(() => {
       this.nextOne();
@@ -141,7 +158,6 @@ Page({
   },
 
   nextOne() {
-    console.log("review执行nextOne");
     if (this.timerId) {
       clearTimeout(this.timerId);
       this.timerId = null;
@@ -149,9 +165,8 @@ Page({
     let { currentIndex, reviewList } = this.data;
     currentIndex++;
     if (currentIndex < reviewList.length) {
-      this.globalIndex++;
       let current = reviewList[currentIndex];
-      if (current) current.lastRememberAgo = getLastRememberAgo(current);
+      if (current) current.lastRememberAgo = this.getLastRememberAgo(current);
       this.setData({
         currentIndex: currentIndex,
         current: current,
@@ -171,32 +186,26 @@ Page({
   },
 
   prevOne() {
-    let { currentIndex, reviewList } = this.data;
-    if (currentIndex > 0) {
-      currentIndex--;
-      let current = reviewList[currentIndex];
-      
-      let showResult = false;
-      let showDeleteButton = false;
+    const { currentIndex, reviewList } = this.data;
+    if (currentIndex <= 0) return;
 
-      if (current.history && current.history.length > 0) {
-        const lastAction = current.history[current.history.length - 1];
-        // 假设history里存有quality
-        if (lastAction && lastAction.quality) {
-          showResult = true;
-          showDeleteButton = lastAction.quality >= 5;
-        }
-      }
+    const newIndex = currentIndex - 1;
+    const current = reviewList[newIndex];
+    if (!current) return;
 
-      if (current) current.lastRememberAgo = getLastRememberAgo(current);
-      
-      this.setData({
-        currentIndex,
-        current,
-        showResult,
-        showDeleteButton
-      });
-    }
+    // 复用结果状态计算逻辑
+    const lastAction = current.history?.slice(-1)[0];
+    const showResult = !!lastAction?.quality;
+    const showDeleteButton = lastAction?.quality >= FEEDBACK_SCORE.REMEMBER;
+
+    current.lastRememberAgo = this.getLastRememberAgo(current);
+    
+    this.setData({
+      currentIndex: newIndex,
+      current,
+      showResult,
+      showDeleteButton
+    });
   },
 
   toMastered() {
@@ -240,13 +249,11 @@ Page({
         if (res.confirm) {
           const storage = require('../../utils/storage');
           await storage.removeKnowledge(groupId, current.id);
-          try {
-            const app = getApp();
-            if (app.globalData && app.globalData.groupKnowledgeCountMap) {
-              const map = app.globalData.groupKnowledgeCountMap;
-              map[groupId] = Math.max(0, (map[groupId] || 1) - 1);
-            }
-          } catch (e) {}
+      const app = getApp();
+      if (app.globalData?.groupKnowledgeCountMap) {
+        const map = app.globalData.groupKnowledgeCountMap;
+        map[groupId] = Math.max(0, (map[groupId] || 1) - 1);
+      }
           const newList = reviewList.filter(k => k.id !== current.id);
           let newCurrent = null, newIndex = -1;
           if (newList.length > 0) {
@@ -290,19 +297,13 @@ Page({
     // 重置
     this.touchStartX = 0;
     this.touchDeltaX = 0;
+  },
+  /**
+   * 计算知识点最后记忆时间描述
+   */
+  getLastRememberAgo(current) {
+    if (!current?.history?.length) return '';
+    const lastRemember = [...current.history].reverse().find(h => h.result);
+    return lastRemember?.time ? formatTimeAgo(lastRemember.time) : '';
   }
 })
-
-// 新增：计算最后一次记住时间的工具函数
-function getLastRememberAgo(current) {
-  if (!current || !current.history || current.history.length === 0) return '';
-  // 找到最后一次记住的历史
-  const lastRemember = (current.history || []).slice().reverse().find(h => h.result);
-  if (!lastRemember) return '';
-  const now = Date.now();
-  const diff = now - lastRemember.time;
-  if (diff < 60 * 1000) return Math.floor(diff / 1000) + '秒前';
-  if (diff < 60 * 60 * 1000) return Math.floor(diff / 60000) + '分钟前';
-  if (diff < 24 * 60 * 60 * 1000) return Math.floor(diff / 3600000) + '小时前';
-  return Math.floor(diff / 86400000) + '天前';
-}

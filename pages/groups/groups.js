@@ -16,34 +16,41 @@ Page({
   },
 
   onShow: function () {
+    storage.refreshAllReviewLists();
     this.loadGroups();
   },
 
   loadGroups: function () {
     this.setData({ loading: true });
-    // 优先用缓存
-    const groups = storage.getAllGroups().map(g => ({
+    // 只加载分组基本信息和统计字段
+    const groups = getApp().globalData.groups.map(g => ({
       id: g.id,
       name: g.name,
       knowledgeCount: g.knowledgeCount,
-      dueCount: 0 // 初始化
+      dueCount: g.dueCount || 0,
+      unmasteredCount: g.unmasteredCount || 0,
+      learnedCount: g.learnedCount || 0
     }));
     this.setData({
       groups,
       newGroupName: '',
       loading: false
-    }, () => {
-      this.updateGroupStats();
     });
   },
 
   updateGroupStats: function () {
     this.data.groups.forEach((group, index) => {
-      // 每次都刷新今日批次
-      storage.resetTodayReviewListIfNeeded(group.id);
+      // 只读缓存，不再刷新今日批次
       const todayList = storage.getTodayReviewList(group.id);
+      // 统计已学会/未掌握数量（未掌握基于已学会）
+      const allKnowledge = storage.getGroupData(group.id) || [];
+      const learnedList = allKnowledge.filter(k => k.learned === true);
+      const learnedCount = learnedList.length;
+      const unmasteredCount = learnedList.filter(k => k.status !== 'mastered').length;
       this.setData({
-        [`groups[${index}].dueCount`]: todayList.length
+        [`groups[${index}].dueCount`]: todayList.length,
+        [`groups[${index}].unmasteredCount`]: unmasteredCount,
+        [`groups[${index}].learnedCount`]: learnedCount
       });
     });
   },
@@ -91,6 +98,15 @@ Page({
     wx.navigateTo({
       url: `/pages/review/review?groupId=${id}`
     });
+  },
+
+  onRenameConfirm() {
+    // ...
+  },
+
+  toSettings() {
+    wx.navigateTo({
+      url: '/pages/settings/settings'
+    });
   }
-  // ... rest of the existing code ...
 });

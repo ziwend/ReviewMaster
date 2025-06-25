@@ -1,6 +1,19 @@
 // index.js
 const storage = require('../../utils/storage');
 
+// 时间戳转友好时间
+function fromNow(ts) {
+  if (!ts) return '';
+  const now = Date.now();
+  const diff = Math.floor((now - ts) / 1000);
+  if (diff < 60) return `${diff}秒前`;
+  if (diff < 3600) return `${Math.floor(diff/60)}分钟前`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}小时前`;
+  return `${Math.floor(diff/86400)}天前`;
+}
+
+let refreshTimer = null;
+
 Page({
   data: {
     groups: [],
@@ -8,24 +21,53 @@ Page({
     unlearnedList: [],
     currentIndex: 0,
     current: null,
-    pageReady: false // 页面是否准备好渲染
+    pageReady: false, // 页面是否准备好渲染
+    receivedGroupId: null
   },
 
-  onLoad() {
-    // onLoad中可以不做事，或者只做一次性的初始化
+  onLoad(options) {
+    if (options && options.groupId) {
+      this.setData({ receivedGroupId: options.groupId });
+    }
   },
   onShow() {
-    const groups = storage.getAllGroups();
-    let groupIndex = this.data.groupIndex || 0;
-    
-    if (groupIndex >= groups.length) {
-      groupIndex = Math.max(0, groups.length - 1);
+    storage.refreshAllReviewLists();
+    this.refreshGroupsAndData();
+    // 启动定时刷新
+    if (refreshTimer) clearInterval(refreshTimer);
+    refreshTimer = setInterval(() => {
+      storage.refreshAllReviewLists();
+      this.refreshGroupsAndData();
+    }, 60000); // 每分钟刷新一次
+  },
+  onHide() {
+    if (refreshTimer) clearInterval(refreshTimer);
+  },
+  onUnload() {
+    if (refreshTimer) clearInterval(refreshTimer);
+  },
+  refreshGroupsAndData() {
+    const groups = getApp().globalData.groups;
+    let groupId = this.data.receivedGroupId;
+    let groupIndex = 0;
+    if (groupId) {
+      groupIndex = groups.findIndex(g => g.id == groupId);
+      if (groupIndex === -1) groupIndex = 0;
+      this.setData({ receivedGroupId: null });
+    } else {
+      groupIndex = this.data.groupIndex || 0;
+      if (groupIndex >= groups.length) groupIndex = Math.max(0, groups.length - 1);
     }
-
-    this.setData({ groups, groupIndex });
-
-    if (groups.length > 0) {
-      this.loadUnlearned(groups[groupIndex].id);
+    const groupsWithStats = groups.map(g => ({
+      ...g,
+      displayName: `${g.name}（${g.dueCount || 0}待复习，${g.lastReviewTime ? fromNow(g.lastReviewTime)+'复习' : '未复习'}）`
+    }));
+    if (groupIndex >= groupsWithStats.length) {
+      groupIndex = Math.max(0, groupsWithStats.length - 1);
+    }
+    this.setData({ groups: groupsWithStats, groupIndex });
+    if (groupsWithStats.length > 0) {
+      this.loadUnlearned(groupsWithStats[groupIndex].id);
     } else {
       this.setData({
         unlearnedList: [],
@@ -34,12 +76,11 @@ Page({
       });
       wx.showModal({
         title: '提示',
-        content: '当前没有分组，请先新建分组！',
+        content: '请先新建学习分组，并导入待学习内容！',
         showCancel: false,
         confirmText: '去新建',
         success: (res) => {
           if (res.confirm) {
-            // 延迟跳转，给弹窗关闭留出时间
             setTimeout(() => {
               wx.navigateTo({ url: '/pages/groups/groups' });
             }, 100);
@@ -58,24 +99,29 @@ Page({
 
   // 加载未学习知识点
   loadUnlearned(groupId) {
-    const unlearnedList = storage.getUnlearnedKnowledge(groupId);
-    this.setData({ unlearnedList, currentIndex: 0, current: unlearnedList[0] || null });
+    // 只存id列表
+    const unlearnedArr = storage.getUnlearnedKnowledge(groupId);
+    const unlearnedList = unlearnedArr.map(k => k.id);
+    const current = unlearnedList.length ? storage.getKnowledgeById(unlearnedList[0]) : null;
+    this.setData({ unlearnedList, currentIndex: 0, current });
   },
 
   // 标记为已学会并切换到下一个
   markLearned() {
     let { unlearnedList, currentIndex, groups, groupIndex } = this.data;
     if (!unlearnedList.length) return;
-    const current = unlearnedList[currentIndex];
+    const currentId = unlearnedList[currentIndex];
+    const current = storage.getKnowledgeById(currentId);
     current.learned = true;
     storage.saveKnowledge(current);
     unlearnedList.splice(currentIndex, 1);
     let nextIndex = currentIndex;
     if (nextIndex >= unlearnedList.length) nextIndex = 0;
+    const nextCurrent = unlearnedList.length ? storage.getKnowledgeById(unlearnedList[nextIndex]) : null;
     this.setData({
       unlearnedList,
       currentIndex: nextIndex,
-      current: unlearnedList[nextIndex] || null
+      current: nextCurrent
     });
   },
 
@@ -93,15 +139,17 @@ Page({
     let { currentIndex, unlearnedList } = this.data;
     if (this.touchDeltaX <= -threshold && currentIndex < unlearnedList.length - 1) {
       // 左滑，下一题
+      const nextCurrent = storage.getKnowledgeById(unlearnedList[currentIndex + 1]);
       this.setData({
         currentIndex: currentIndex + 1,
-        current: unlearnedList[currentIndex + 1]
+        current: nextCurrent
       });
     } else if (this.touchDeltaX >= threshold && currentIndex > 0) {
       // 右滑，上一题
+      const prevCurrent = storage.getKnowledgeById(unlearnedList[currentIndex - 1]);
       this.setData({
         currentIndex: currentIndex - 1,
-        current: unlearnedList[currentIndex - 1]
+        current: prevCurrent
       });
     }
     this.touchStartX = 0;
@@ -140,10 +188,22 @@ Page({
 
   toReviewPage: function () {
     const { groups, groupIndex } = this.data;
-    if (!groups.length) return;
+    if (!groups.length) {
+      wx.showToast({ title: '请先新建分组', icon: 'none' });
+      return;
+    }
     const id = groups[groupIndex].id;
     wx.navigateTo({
       url: `/pages/review/review?groupId=${id}`
     });
   }
 });
+
+// 注册wxml过滤器
+if (typeof wx !== 'undefined' && wx.canIUse && wx.canIUse('nextTick')) {
+  wx.nextTick(() => {
+    if (typeof getApp === 'function' && getApp().globalData) {
+      getApp().globalData.fromNow = fromNow;
+    }
+  });
+}

@@ -10,18 +10,19 @@
  * 
  * `group-${groupId}`: Array<Number> - [1, 2, 5, 10, ...] (list of knowledge IDs)
  * `knowledge-${knowledgeId}`: Object - {
- *   id: Number,           
- *   question: String,     
- *   answer: String,       
+ *   id: Number,           // 唯一ID
+ *   question: String,     // 问题
+ *   answer: String,       // 答案
  *   media: Array,         // 媒体资源 [{type: 'image'|'audio', url: String}]
- *   groupId: Number,      
- *   addTime: Number,      
- *   nextReviewTime: Number,
- *   reviewCount: Number,  
- *   history: Array,       
- *   status: String,       
- *   difficulty: Number,   
- *   lastInterval: Number  
+ *   groupId: Number,      // 所属分组ID
+ *   addTime: Number,      // 添加时间戳
+ *   nextReviewTime: Number, // 下次复习时间
+ *   reviewCount: Number,  // 总复习次数
+ *   history: Array,       // 复习历史 [{time, quality, interval, efactor}]
+ *   status: String,       // 状态: pending/reviewing/mastered
+ *   repetition: Number,   // 连续记住次数（SM-2算法）
+ *   efactor: Number,      // 易记因子（SM-2算法）
+ *   learned: Boolean      // 是否已学习
  * }
  */
 
@@ -61,7 +62,14 @@ function updateGroupCountCache(groupId, delta) {
 // --- Group Functions ---
 
 function getAllGroups() {
-  return wx.getStorageSync('groups') || [];
+  const app = typeof getApp === 'function' ? getApp() : null;
+  if (app && app.globalData && Array.isArray(app.globalData.groups) && app.globalData.groups.length > 0) {
+    return app.globalData.groups;
+  }
+  // 全局变量为空时从本地存储同步
+  const groups = wx.getStorageSync('groups') || [];
+  if (app && app.globalData) app.globalData.groups = groups;
+  return groups;
 }
 
 function addGroup(groupName) {
@@ -75,6 +83,8 @@ function addGroup(groupName) {
     };
     groups.push(newGroup);
     wx.setStorageSync('groups', groups);
+    // 更新全局groups
+    if (typeof getApp === 'function') getApp().refreshGroups && getApp().refreshGroups();
     // 为新组创建一个空的知识点索引
     wx.setStorageSync(`group-${newGroup.id}`, []);
     return newGroup;
@@ -94,6 +104,8 @@ function updateGroup(groupToUpdate) {
   if (index !== -1) {
     groups[index].name = groupToUpdate.name;
     wx.setStorageSync('groups', groups);
+    // 更新全局groups
+    if (typeof getApp === 'function') getApp().refreshGroups && getApp().refreshGroups();
   }
 }
 
@@ -102,14 +114,14 @@ function removeGroup(groupId) {
   let groups = getAllGroups();
   const updatedGroups = groups.filter(g => g.id !== groupId);
   wx.setStorageSync('groups', updatedGroups);
-
+  // 更新全局groups
+  if (typeof getApp === 'function') getApp().refreshGroups && getApp().refreshGroups();
   // 2. 删除该分组下的所有知识点详情
   const groupKey = `group-${groupId}`;
   const knowledgeIds = wx.getStorageSync(groupKey) || [];
   knowledgeIds.forEach(id => {
     wx.removeStorageSync(`knowledge-${id}`);
   });
-
   // 3. 删除分组索引本身
   wx.removeStorageSync(groupKey);
 }
@@ -134,56 +146,30 @@ if (typeof getApp === 'function') {
   } catch (e) {}
 }
 
-async function addKnowledgeBatchToGroup(groupId, knowledgeBatch) {
-  if (!knowledgeBatch || knowledgeBatch.length === 0) {
-    const group = getAllGroups().find(g => g.id === groupId);
-    return {
-      newIds: [],
-      finalKnowledgeCount: group ? group.knowledgeCount : 0
-    };
+function updateGroupStats(groupId) {
+  const cache = wx.getStorageSync(`todayReviewList-${groupId}`);
+  let dueCount = 0;
+  if (cache && Array.isArray(cache.ids)) {
+    dueCount = cache.ids
+      .map(id => getKnowledgeById(id))
+      .filter(k => k && k.nextReviewTime <= Date.now())
+      .length;
   }
-
-  const groupKey = `group-${groupId}`;
-  let knowledgeIds = wx.getStorageSync(groupKey) || [];
-  let nextId = wx.getStorageSync('nextKnowledgeId') || 1;
-  
-  const newIds = [];
-  // 使用分块处理避免UI阻塞
-  await processInChunks(knowledgeBatch, async (knowledge) => {
-    const newKnowledgeId = nextId;
-    knowledge.id = newKnowledgeId;
-    // 初始化所有字段
-    knowledge.media = knowledge.media || [];
-    knowledge.difficulty = knowledge.difficulty || 3;
-    knowledge.addTime = knowledge.addTime || Date.now();
-    knowledge.nextReviewTime = knowledge.nextReviewTime || Date.now();
-    knowledge.learned = typeof knowledge.learned === 'boolean' ? knowledge.learned : false;
-    wx.setStorageSync(`knowledge-${newKnowledgeId}`, knowledge);
-    newIds.push(newKnowledgeId);
-    nextId++;
-  });
-  
-  wx.setStorageSync('nextKnowledgeId', nextId);
-
-  const updatedIds = knowledgeIds.concat(newIds);
-  wx.setStorageSync(groupKey, updatedIds);
-
+  const allKnowledge = getGroupData(groupId) || [];
+  const learnedCount = allKnowledge.filter(k => k.learned === true).length;
+  const unmasteredCount = allKnowledge.filter(k => k.learned === true && k.status !== 'mastered').length;
   let groups = getAllGroups();
-  const groupIndex = groups.findIndex(g => g.id == groupId);
-  if (groupIndex !== -1) {
-    groups[groupIndex].knowledgeCount = updatedIds.length;
+  const idx = groups.findIndex(g => g.id == groupId);
+  if (idx !== -1) {
+    groups[idx].dueCount = dueCount;
+    groups[idx].learnedCount = learnedCount;
+    groups[idx].unmasteredCount = unmasteredCount;
     wx.setStorageSync('groups', groups);
+    if (typeof getApp === 'function') getApp().refreshGroups && getApp().refreshGroups();
   }
-
-  // 更新缓存
-  updateGroupCountCache(groupId, knowledgeBatch.length);
-
-  return { 
-    newIds, 
-    finalKnowledgeCount: updatedIds.length
-  };
 }
 
+// 在知识点变动时自动更新分组统计
 function saveKnowledge(knowledge) {
   if (!knowledge || typeof knowledge.id === 'undefined') {
     console.error('saveKnowledge failed: knowledge or knowledge.id is missing', knowledge);
@@ -192,6 +178,7 @@ function saveKnowledge(knowledge) {
   if (typeof knowledge.learned !== 'boolean') knowledge.learned = false;
   const key = `knowledge-${knowledge.id}`;
   wx.setStorageSync(key, knowledge);
+  if (knowledge.groupId) updateGroupStats(knowledge.groupId);
 }
 
 function removeKnowledge(groupId, knowledgeId) {
@@ -210,10 +197,13 @@ function removeKnowledge(groupId, knowledgeId) {
   if (groupIndex > -1) {
     groups[groupIndex].knowledgeCount = knowledgeIds.length;
     wx.setStorageSync('groups', groups);
+    if (typeof getApp === 'function') getApp().refreshGroups && getApp().refreshGroups();
   }
 
   // 更新缓存
   updateGroupCountCache(groupId, -1);
+
+  updateGroupStats(groupId);
 }
 
 function getKnowledgeById(id) {
@@ -339,6 +329,105 @@ function getUnlearnedKnowledge(groupId) {
   return all.filter(k => !k.learned);
 }
 
+const defaultSettings = {
+  batchSize: 20,
+  delayRemember: 10, // seconds
+  delayForget: 30, // seconds
+};
+
+function getDefaultSettings() {
+  return JSON.parse(JSON.stringify(defaultSettings));
+}
+
+function getSettings() {
+  const settings = wx.getStorageSync('app_settings');
+  if (settings) {
+    // 合并默认设置，防止新增设置项的用户本地没有
+    return { ...getDefaultSettings(), ...settings };
+  }
+  return getDefaultSettings();
+}
+
+function saveSettings(settings) {
+  wx.setStorageSync('app_settings', settings);
+}
+
+function refreshAllReviewLists() {
+  const allGroups = getAllGroups();
+  const settings = getSettings();
+  const batchSize = settings.batchSize || 20;
+  allGroups.forEach(g => {
+    resetTodayReviewListIfNeeded(g.id);
+    // 严格生成reviewList：只包含learned且到期，长度不超过batchSize
+    const allKnowledge = getGroupData(g.id) || [];
+    const now = Date.now();
+    // 先选到期的learned知识点
+    const dueArr = allKnowledge.filter(k => k.learned === true && k.status !== 'mastered' && k.nextReviewTime <= now);
+    // 不足batchSize再补未复习的learned
+    let batch = dueArr.slice(0, batchSize);
+    if (batch.length < batchSize) {
+      const notReviewed = allKnowledge.filter(k => k.learned === true && (!k.history || k.history.length === 0) && !batch.includes(k));
+      batch = batch.concat(notReviewed.slice(0, batchSize - batch.length));
+    }
+    const ids = batch.map(k => k.id);
+    wx.setStorageSync(`todayReviewList-${g.id}`, { date: getTodayStr(), ids });
+    // 同步更新分组统计字段
+    updateGroupStats(g.id);
+  });
+}
+
+async function addKnowledgeBatchToGroup(groupId, knowledgeBatch) {
+  if (!knowledgeBatch || knowledgeBatch.length === 0) {
+    const group = getAllGroups().find(g => g.id === groupId);
+    return {
+      newIds: [],
+      finalKnowledgeCount: group ? group.knowledgeCount : 0
+    };
+  }
+
+  const groupKey = `group-${groupId}`;
+  let knowledgeIds = wx.getStorageSync(groupKey) || [];
+  let nextId = wx.getStorageSync('nextKnowledgeId') || 1;
+
+  const newIds = [];
+  // 分块处理避免UI阻塞
+  await processInChunks(knowledgeBatch, async (knowledge) => {
+    const newKnowledgeId = nextId;
+    knowledge.id = newKnowledgeId;
+    knowledge.media = knowledge.media || [];
+    knowledge.difficulty = knowledge.difficulty || 3;
+    knowledge.addTime = knowledge.addTime || Date.now();
+    knowledge.nextReviewTime = knowledge.nextReviewTime || Date.now();
+    knowledge.learned = typeof knowledge.learned === 'boolean' ? knowledge.learned : false;
+    wx.setStorageSync(`knowledge-${newKnowledgeId}`, knowledge);
+    newIds.push(newKnowledgeId);
+    nextId++;
+  });
+
+  wx.setStorageSync('nextKnowledgeId', nextId);
+
+  const updatedIds = knowledgeIds.concat(newIds);
+  wx.setStorageSync(groupKey, updatedIds);
+
+  let groups = getAllGroups();
+  const groupIndex = groups.findIndex(g => g.id == groupId);
+  if (groupIndex !== -1) {
+    groups[groupIndex].knowledgeCount = updatedIds.length;
+    wx.setStorageSync('groups', groups);
+    if (typeof getApp === 'function') getApp().refreshGroups && getApp().refreshGroups();
+  }
+
+  // 更新分组统计
+  updateGroupStats(groupId);
+
+  updateGroupCountCache(groupId, knowledgeBatch.length);
+
+  return { 
+    newIds, 
+    finalKnowledgeCount: updatedIds.length
+  };
+}
+
 module.exports = {
   getAllGroups,
   addGroup,
@@ -354,4 +443,9 @@ module.exports = {
   resetTodayReviewListIfNeeded,
   updateKnowledgeBySM2,
   getUnlearnedKnowledge,
+  getDefaultSettings,
+  getSettings,
+  saveSettings,
+  refreshAllReviewLists,
+  updateGroupStats,
 };

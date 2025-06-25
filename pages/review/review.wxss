@@ -11,7 +11,7 @@
   flex-direction: column;
   justify-content: flex-start;
   align-items: stretch;
-  padding: 40rpx;
+  padding: 20rpx;
 }
 
 .question-text {
@@ -156,27 +156,6 @@
   width: 320rpx;
 }
 
-/* 底部导航 */
-.bottom-nav {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  height: calc(100rpx + env(safe-area-inset-bottom));
-  padding-bottom: env(safe-area-inset-bottom);
-  background-color: var(--card-background-color);
-  border-top: 1rpx solid var(--separator-color);
-  font-size: 24rpx;
-  color: var(--text-color-secondary);
-}
-
-.nav-item {
-  padding: 20rpx;
-}
-
 .only-question {
   flex: 1;
   display: flex;
@@ -188,6 +167,8 @@
   color: var(--text-color-primary);
   line-height: 1.6;
   white-space: pre-wrap;
+  width: 100%; /* 新增，确保居中 */
+  box-sizing: border-box; /* 新增，防止padding影响 */
 }
 
 .stat-bar {

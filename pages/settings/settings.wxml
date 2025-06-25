@@ -1,0 +1,30 @@
+<view class="container">
+  <view class="setting-group">
+    <view class="setting-group-title">复习设置</view>
+    <view class="setting-item">
+      <view class="setting-label">每日复习批次大小</view>
+      <input class="setting-input" type="number" value="{{settings.batchSize}}" data-key="batchSize" bindinput="handleInputChange" />
+    </view>
+    <view class="setting-desc">每组每天生成的最大复习数量（建议 1-100）。</view>
+  </view>
+
+  <view class="setting-group">
+    <view class="setting-group-title">自动跳转延时（秒）</view>
+    <view class="setting-item">
+      <view class="setting-label">"记住了/模糊"后</view>
+      <input class="setting-input" type="number" value="{{settings.delayRemember}}" data-key="delayRemember" bindinput="handleInputChange" />
+    </view>
+    <view class="setting-desc">回答正确后，自动跳转到下一题的等待时间（建议 1-300）。</view>
+
+    <view class="setting-item">
+      <view class="setting-label">"没记住"后</view>
+      <input class="setting-input" type="number" value="{{settings.delayForget}}" data-key="delayForget" bindinput="handleInputChange" />
+    </view>
+    <view class="setting-desc">回答错误后，自动跳转到下一题的等待时间（建议 1-300）。</view>
+  </view>
+
+  <view class="button-area">
+    <button class="btn btn-restore" bindtap="handleRestore">恢复默认</button>
+    <button class="btn btn-save" type="primary" bindtap="handleSave">保存设置</button>
+  </view>
+</view> 

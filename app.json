@@ -4,7 +4,8 @@
     "pages/groups/groups",
     "pages/import/import",
     "pages/review/review",
-    "pages/mastered/mastered"
+    "pages/mastered/mastered",
+    "pages/settings/settings"
   ],
   "window": {
     "backgroundTextStyle": "light",

@@ -222,13 +222,26 @@ Page({
         success: async () => {
           // 跳转前加延迟，确保本地存储和批次写入完成
           await new Promise(r => setTimeout(r, 200));
-          // wx.navigateTo({
-          //   url: `/pages/review/review?groupId=${groupId}`
-          // });
-          wx.navigateBack();
+          safeGoBackToIndexWithGroupId(groupId);
           resolve();
         }
       });
     });
   }
 })
+
+// 安全返回index页面并携带groupId
+function safeGoBackToIndexWithGroupId(groupId) {
+  const pages = getCurrentPages();
+  if (pages.length >= 3) {
+    const targetPage = pages[pages.length - 3];
+    if (targetPage && targetPage.route && targetPage.route.indexOf('pages/index/index') !== -1) {
+      if (targetPage.setData) {
+        targetPage.setData({ receivedGroupId: groupId });
+      }
+      wx.navigateBack({ delta: 2 });
+      return;
+    }
+  }
+  wx.reLaunch({ url: `/pages/index/index?groupId=${groupId}` });
+}

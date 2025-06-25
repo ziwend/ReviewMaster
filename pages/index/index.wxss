@@ -13,16 +13,25 @@
 }
 
 .group.row-flex {
-    justify-content: space-between;
-    align-items: center;
-  }
-  
+  flex-direction: row;
+  justify-content: space-between; /* 两端对齐 */
+  align-items: center;
+  width: 100%; /* 确保宽度填满 */
+}
+
 .group-btn {
-    /* 调整按钮样式 */
-    background-color: #f0f0f0;
-    border: none;
-    font-size: 28rpx;
-  }
+  width: 150rpx !important; /* 固定宽度 */
+  min-width: unset;
+  max-width: none;
+  display: inline-block;
+  padding: 0 16rpx;
+  background-color: #f0f0f0;
+  border: none;
+  font-size: 28rpx;
+  white-space: nowrap;
+  margin-left: auto; /* 移除自动边距 */
+}
+
 .group-header {
   margin-right: 24rpx;
   font-size: 30rpx;
@@ -31,18 +40,29 @@
 }
 
 .picker-display {
-  width: 50vw; /* 屏幕一半宽度 */
+  width: auto;
+  min-width: 120rpx;
+  max-width: 90vw;
   display: flex;
-  justify-content: space-between;
   align-items: center;
   height: 90rpx;
   line-height: 90rpx;
   border: 1rpx solid var(--separator-color);
   border-radius: var(--border-radius);
-  padding: 0 24rpx;
+  padding: 0 16rpx;
   font-size: 30rpx;
   color: var(--text-color-secondary);
   background-color: var(--card-background-color);
+  margin-right: 16rpx;
+  overflow: hidden;
+}
+
+.picker-display text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  width: 100%;
 }
 
 .picker-arrow {
@@ -67,6 +87,7 @@
   justify-content: flex-start;
   align-items: stretch;
   padding: 20rpx;
+  margin-top: 10rpx;
   margin-bottom: 40rpx;
 }
 
@@ -87,11 +108,21 @@
 }
 
 .question-text {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
   font-size: 48rpx;
   font-weight: 500;
   color: var(--text-color-primary);
   line-height: 1.6;
   white-space: pre-wrap;
+}
+.question-index {
+  font-size: 22rpx;
+  color: #bbb;
+  margin-right: 16rpx;
+  vertical-align: middle;
+  flex-shrink: 0;
 }
 
 .answer-section {
@@ -136,6 +167,15 @@
 }
 
 /* --- Button Styles --- */
+.btn-wrapper-top {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 88rpx;
+    transition: opacity 0.2s;
+    overflow: hidden;
+  }
 .btn-wrapper {
   position: relative;
   display: flex;

@@ -1,6 +1,8 @@
 /* pages/mastered/mastered.wxss */
 .mastered-container {
-  padding-bottom: calc(160rpx + env(safe-area-inset-bottom)); /* 为底部按钮留出空间 */
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
 }
 
 .page-header {
@@ -128,10 +130,19 @@
 }
 
 /* 空状态 */
-.empty-state {
-  margin-top: 20vh;
+.mastered-empty {
+  flex: 1;
+  justify-content: center;
 }
 
+.empty-icon {
+  width: 240rpx;
+  height: 240rpx;
+}
+.group-btn.btn-wrapper {
+  margin-top: 60rpx;
+  width: 320rpx;
+}
 .bottom-action {
   position: fixed;
   bottom: 0;

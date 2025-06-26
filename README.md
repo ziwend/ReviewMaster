@@ -7,16 +7,44 @@
 ## 核心功能
 
 ### 🗂️ 分组管理
-- 创建、重命名和删除知识分组
+- 创建和删除知识分组
 - 实时显示每个分组的待复习知识点数量
 - 所有分组与知识点数据完全本地存储，保护用户隐私
 
 ### 📥 知识导入
 - 支持两种导入方式：
   1. **文本输入**：手动输入知识点（问题|||答案格式）
-  2. **JSON文件导入**：导入结构化知识点数据
-- 分批处理机制：支持大数据量导入，避免界面卡顿
+  2. **JSON文件导入**：支持包含多媒体内容的数组对象格式。
+- **分批处理机制**：支持大数据量导入，避免界面卡顿
 - 进度显示：实时显示导入进度
+
+#### JSON 文件格式说明
+
+**推荐格式：数组对象（支持多媒体）**
+此格式功能最全，支持为每个知识点添加图片或音频。`media` 字段为可选。
+
+```json
+[
+  {
+    "question": "太阳的颜色是什么？",
+    "answer": "黄色",
+    "media": [
+      { "type": "image", "url": "https://example.com/sun.jpg" }
+    ]
+  },
+  {
+    "question": "请听音频，回答内容",
+    "answer": "音频内容",
+    "media": [
+      { "type": "audio", "url": "https://example.com/audio.mp3" }
+    ]
+  },
+  {
+    "question": "没有媒体的问题",
+    "answer": "没有媒体的答案"
+  }
+]
+```
 
 ### 🔁 智能复习系统
 - **混合SM-2间隔算法**：新知识点前几次复习采用更短间隔，之后进入SM-2个性化间隔。
@@ -65,7 +93,6 @@ graph TD
   reviewCount: Number,  // 复习次数
   history: Array,       // 复习历史 [{time, quality, interval, efactor}]
   status: String,       // 状态: pending/reviewing/mastered
-  difficulty: Number,   // 难度系数（预留）
   lastInterval: Number, // 上一次复习间隔（天）
   media: Array,         // 媒体资源（可选）
   learned: Boolean,     // 是否纳入复习
@@ -81,6 +108,9 @@ graph TD
   id: Number,           // 唯一ID
   name: String,         // 分组名
   knowledgeCount: Number, // 知识点数量
+  dueCount: Number,     // 待复习数量
+  learnedCount: Number, // 已学会数量
+  unmasteredCount: Number, // 未掌握数量
   createTime: Number    // 创建时间戳
 }
 ```
@@ -95,7 +125,7 @@ graph TD
     E --> F{用户选择记得/模糊/没记住}
     F -->|记得/模糊| G[更新复习次数和间隔]
     F -->|没记住| H[重置复习状态]
-    G --> I{达到最高复习次数?}
+    G --> I{repetition≥5 且 efactor≥2.5?}
     I -->|是| J[标记为已掌握]
     I -->|否| K[计算下次复习时间]
     H --> K
@@ -123,6 +153,10 @@ graph TD
   - 反馈分数（quality）
   - 间隔（interval，天）
   - efactor
+
+> **切换为"已掌握"条件说明：**
+> - 只有当某知识点连续5次记住（repetition≥5），且efactor≥2.5时，才会被标记为"已掌握"（mastered），不再进入常规复习队列。
+> - 该条件比单纯"复习次数达标"更严格，确保只有真正熟练且记忆强度高的知识点才会被判定为已掌握。
 
 ### 文件结构
 ```
@@ -191,3 +225,14 @@ graph TD
 ---
 
 > 本项目核心复习算法以SM-2为主，主逻辑以efactor、repetition等字段为准。
+
+### 分组统计与数据一致性
+
+- 每个分组对象维护如下统计字段，所有页面只读这些字段，极大提升性能和一致性：
+  - `dueCount`：待复习知识点数量（即今日批次中 nextReviewTime <= now 的 learned 且未掌握知识点数）
+  - `learnedCount`：已学会知识点数量（learned === true）
+  - `unmasteredCount`：未掌握知识点数量（learned === true 且 status !== 'mastered'）
+- 统计字段仅在知识点变动时通过 `updateGroupStats` 自动更新，避免全量遍历。
+- 所有页面、定时器、复习流程均以 reviewList 为唯一数据源，保证各页面数据一致。
+- 定时器机制保证即使页面不重载，dueCount 也能自动刷新。
+

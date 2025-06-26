@@ -30,16 +30,31 @@ Page({
       this.setData({ receivedGroupId: options.groupId });
     }
   },
-  onShow() {
-    storage.refreshAllReviewLists();
+async onShow() {
+  // 显示加载状态
+  wx.showLoading({ title: '加载中', mask: true });
+  
+  try {
+    // 使用异步刷新
+    await storage.refreshAllReviewListsAsync();
     this.refreshGroupsAndData();
-    // 启动定时刷新
-    if (refreshTimer) clearInterval(refreshTimer);
-    refreshTimer = setInterval(() => {
-      storage.refreshAllReviewLists();
+  } catch (e) {
+    console.error('首页数据刷新失败', e);
+  } finally {
+    wx.hideLoading();
+  }
+  
+  // 调整定时器为5分钟
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(async () => {
+    try {
+      await storage.refreshAllReviewListsAsync();
       this.refreshGroupsAndData();
-    }, 60000); // 每分钟刷新一次
-  },
+    } catch (e) {
+      console.error('定时刷新失败', e);
+    }
+  }, 300000); // 5分钟
+},
   onHide() {
     if (refreshTimer) clearInterval(refreshTimer);
   },

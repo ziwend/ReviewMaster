@@ -22,91 +22,89 @@ Page({
     groups: [],
     groupId: null,
     currentGroup: {},
-    reviewList: [],
+    fullReviewList: [], // 新增：全量待复习id
+    reviewList: [], // 当前批次待复习id
     currentIndex: -1,
     current: null,
     showResult: false,
     loading: true,
-    isBatchCompleted: false,
+    isBatchCompleted: false, // 当前批次已复习完
+    isAllReviewed: false, // 所有待复习已复习完
+    batchSize: 20,
     touchStartX: 0,
-    showDeleteButton: false
+    touchStartY: 0,
+    touchDeltaX: 0,
+    touchDeltaY: 0,
+    showDeleteButton: false,
+    showGestureGuide: true,
+    gestureGuideActive: true,
+    gestureGuideTouchStartY: 0
   },
 
   settings: {}, // 存储设置
 
   onLoad: async function(options) {
-    this.timerId = null; // 初始化定时器ID
-    this.settings = storage.getSettings(); // 加载设置
+    this.timerId = null;
+    this.settings = storage.getSettings();
     let { groupId } = options;
     const groups = getApp().globalData.groups;
     if (!groupId && groups && groups.length > 0) {
       groupId = groups[0].id;
     }
-
     const currentGroup = groups.find(g => g.id == groupId) || (groups && groups[0]) || {};
-    
-    // 设置导航栏标题为分组名
     if (currentGroup && currentGroup.name) {
       wx.setNavigationBarTitle({ title: currentGroup.name });
     }
-
     this.setData({
       groups: groups || [],
       groupId: groupId,
       currentGroup: currentGroup,
-      loading: true
+      loading: true,
+      batchSize: this.settings.batchSize || 20
     });
-
     if (groupId) {
-      await this.loadReviewList();
+      await this.loadFullReviewList(groupId);
     } else {
       this.setData({ loading: false });
     }
+    const hideGuide = wx.getStorageSync('hideReviewGestureGuide');
+    this.setData({ showGestureGuide: !hideGuide, gestureGuideActive: !hideGuide });
   },
 
-  onShow: async function() {
-    storage.refreshAllReviewLists();
-    // 从其他页面返回时，可能需要刷新数据
-    if (this.data.groupId) {
-      this.setData({ loading: true });
-      await this.loadReviewList();
-    }
+  onShow: function() {
+    // 可选：如需定时刷新 dueCount，可在此实现
+    // 不再全量调用 refreshAllReviewLists
   },
 
-  async loadReviewList() {
-    const { groupId } = this.data;
-    if (!groupId) {
-      this.setData({ loading: false });
-      return;
-    }
-    // 只读缓存，不再刷新
+  async loadFullReviewList(groupId) {
+    // 获取所有待复习id
     const cache = wx.getStorageSync(`todayReviewList-${groupId}`);
-    const todayList = cache && Array.isArray(cache.ids) ? cache.ids : [];
-    const reviewList = todayList.map(id => storage.getKnowledgeById(id)).filter(Boolean);
-    if (reviewList.length === 0) {
-      this.setData({
-        reviewList: [],
-        current: null,
-        currentIndex: -1,
-        loading: false
-      });
+    const fullReviewList = cache && Array.isArray(cache.ids) ? cache.ids : [];
+    this.setData({ fullReviewList });
+    this.loadNextBatch();
+  },
+
+  loadNextBatch() {
+    let { fullReviewList, batchSize } = this.data;
+    if (!fullReviewList.length) {
+      this.setData({ isAllReviewed: true, isBatchCompleted: false, reviewList: [], current: null, currentIndex: -1, loading: false });
       return;
     }
-    let current = reviewList[0];
-    if (current) current.lastRememberAgo = getLastRememberAgo(current);
+    const batch = fullReviewList.slice(0, batchSize);
     this.setData({
-      reviewList,
-      current: current,
+      reviewList: batch.map(id => storage.getKnowledgeById(id)).filter(Boolean),
+      current: batch.length ? storage.getKnowledgeById(batch[0]) : null,
       currentIndex: 0,
       isBatchCompleted: false,
-      loading: false
+      isAllReviewed: false,
+      loading: false // 这里确保关闭 loading
     });
   },
 
   // 统一处理复习反馈
   handleReviewFeedback(type) {
     const quality = FEEDBACK_SCORE[type.toUpperCase()] || 0;
-    const { current } = this.data;
+    let { current } = this.data;
     if (!current) return;
     
     this.setData({ 
@@ -162,7 +160,7 @@ Page({
       clearTimeout(this.timerId);
       this.timerId = null;
     }
-    let { currentIndex, reviewList } = this.data;
+    let { currentIndex, reviewList, fullReviewList, batchSize } = this.data;
     currentIndex++;
     if (currentIndex < reviewList.length) {
       let current = reviewList[currentIndex];
@@ -174,14 +172,13 @@ Page({
         showDeleteButton: false
       });
     } else {
-      this.setData({
-        current: null,
-        currentIndex: -1,
-        reviewList: [],
-        isBatchCompleted: true,
-        showResult: false,
-        showDeleteButton: false
-      });
+      // 本批复习完
+      fullReviewList = fullReviewList.slice(batchSize);
+      if (fullReviewList.length) {
+        this.setData({ isBatchCompleted: true, fullReviewList, reviewList: [], current: null, currentIndex: -1 });
+      } else {
+        this.setData({ isAllReviewed: true, isBatchCompleted: false, fullReviewList: [], reviewList: [], current: null, currentIndex: -1 });
+      }
     }
   },
 
@@ -259,7 +256,7 @@ Page({
           if (newList.length > 0) {
             newIndex = Math.min(currentIndex, newList.length - 1);
             newCurrent = newList[newIndex];
-            if (newCurrent) newCurrent.lastRememberAgo = getLastRememberAgo(newCurrent);
+            if (newCurrent) newCurrent.lastRememberAgo = this.getLastRememberAgo(newCurrent);
           }
           that.setData({
             reviewList: newList,
@@ -276,34 +273,96 @@ Page({
 
   onTouchStart(e) {
     this.touchStartX = e.touches[0].clientX;
+    this.touchStartY = e.touches[0].clientY;
     this.touchDeltaX = 0;
+    this.touchDeltaY = 0;
   },
 
   onTouchMove(e) {
     const moveX = e.touches[0].clientX;
+    const moveY = e.touches[0].clientY;
     this.touchDeltaX = moveX - this.touchStartX;
+    this.touchDeltaY = moveY - this.touchStartY;
     // 可选：可在此处做视觉反馈
   },
 
   onTouchEnd(e) {
-    const threshold = 60; // 滑动阈值(px)
-    if (this.touchDeltaX <= -threshold) {
+    const thresholdX = 60; // 横向滑动阈值(px)
+    const thresholdY = 60; // 纵向滑动阈值(px)
+    // 优先判断纵向滑动
+    if (this.touchDeltaY >= thresholdY) {
+      // 下滑，记住了
+      this.markResult({ currentTarget: { dataset: { result: 'remember' } } });
+    } else if (this.touchDeltaY <= -thresholdY) {
+      // 上滑，没记住
+      this.markResult({ currentTarget: { dataset: { result: 'forget' } } });
+    } else if (this.touchDeltaX <= -thresholdX) {
       // 左滑，下一题
       this.nextOne();
-    } else if (this.touchDeltaX >= threshold) {
+    } else if (this.touchDeltaX >= thresholdX) {
       // 右滑，上一题
       this.prevOne();
     }
     // 重置
     this.touchStartX = 0;
+    this.touchStartY = 0;
     this.touchDeltaX = 0;
+    this.touchDeltaY = 0;
   },
   /**
    * 计算知识点最后记忆时间描述
    */
   getLastRememberAgo(current) {
     if (!current?.history?.length) return '';
-    const lastRemember = [...current.history].reverse().find(h => h.result);
+    // 只要 quality >= 3 就算记住
+    const lastRemember = [...current.history].reverse().find(h => h.quality >= 3);
     return lastRemember?.time ? formatTimeAgo(lastRemember.time) : '';
+  },
+
+  // 跳转去学习
+  toLearnPage() {
+    const { groups, groupId } = this.data;
+    const id = groupId || (groups[0] && groups[0].id);
+    wx.navigateTo({ url: `/pages/learn/learn?groupId=${id}` });
+  },
+
+  onGestureGuideTouchStart(e) {
+    this.setData({ gestureGuideTouchStartY: e.touches[0].clientY });
+  },
+
+  onGestureGuideTouchEnd(e) {
+    if (!this.data.gestureGuideActive) return;
+    const deltaY = e.changedTouches[0].clientY - this.data.gestureGuideTouchStartY;
+    if (deltaY >= 60) {
+      // 下滑
+      this.setData({ showGestureGuide: false, gestureGuideActive: false });
+      wx.setStorageSync('hideReviewGestureGuide', true);
+      wx.showModal({
+        title: '提示',
+        content: '您向下滑动，表示记住了',
+        showCancel: false,
+        success: () => { this.markResult({ currentTarget: { dataset: { result: 'remember' } } }); }
+      });
+    } else if (deltaY <= -60) {
+      // 上滑
+      this.setData({ showGestureGuide: false, gestureGuideActive: false });
+      wx.setStorageSync('hideReviewGestureGuide', true);
+      wx.showModal({
+        title: '提示',
+        content: '您向上滑动，表示没记住',
+        showCancel: false,
+        success: () => { this.markResult({ currentTarget: { dataset: { result: 'forget' } } }); }
+      });
+    }
+  },
+
+  previewImage(e) {
+    const url = e.currentTarget.dataset.url;
+    if (url) {
+      wx.previewImage({
+        current: url,
+        urls: [url]
+      });
+    }
   }
 })

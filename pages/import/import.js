@@ -58,107 +58,102 @@ Page({
   },
 
   async importFromTxt() {
+    this.setData({ showProgressBar: true, progress: 0, importing: true });
+
+    let tempFilePath;
     try {
       const res = await wx.chooseMessageFile({
         count: 1,
         type: 'file',
-        extension: ['json'], // 只允许选择json文件
+        extension: ['json'],
       });
-      const path = res.tempFiles[0].path;
-      await this.readFileAndImport(path, true); // 传入isJson=true
+      tempFilePath = res.tempFiles[0].path;
     } catch (err) {
       if (err.errMsg && err.errMsg.includes('cancel')) {
-        return;
+        this.setData({ showProgressBar: false, importing: false });
+        return; // 用户取消选择
       }
       console.error("选择文件失败", err);
-      wx.showToast({
-        title: '选择文件失败',
-        icon: 'none'
-      });
+      wx.showToast({ title: '选择文件失败', icon: 'none' });
+      this.setData({ showProgressBar: false, importing: false });
+      return;
     }
-  },
 
-  async readFileAndImport(path, isJson = false) {
-    const fs = wx.getFileSystemManager();
     try {
+      const fs = wx.getFileSystemManager();
       const content = await new Promise((resolve, reject) => {
         fs.readFile({
-          filePath: path,
+          filePath: tempFilePath,
           encoding: 'utf-8',
-          success: res => resolve(res.data),
-          fail: reject
+          success: (res) => resolve(res.data),
+          fail: reject,
         });
       });
 
-      if (isJson) {
-        const jsonData = JSON.parse(content);
-        const knowledgeList = Object.keys(jsonData).map(key => ({
-          question: key,
-          answer: jsonData[key]
-        }));
-        this.startImport(knowledgeList);
-      } else {
-        this.setData({ content });
-        wx.showToast({
-          title: '文件内容已加载',
-          icon: 'none'
-        });
-      }
+      this.handleJsonContent(content);
+
     } catch (e) {
-      console.error("读取或解析文件失败", e);
-      wx.showToast({
-        title: '文件格式错误或读取失败',
-        icon: 'none'
-      });
+      console.error('读取文件失败', e);
+      wx.showToast({ title: `读取文件失败: ${e.message}`, icon: 'none', duration: 3000 });
+      this.setData({ importing: false, showProgressBar: false });
     }
   },
 
   startImportFromTextarea() {
-    console.log("import执行startImportFromTextarea");
-    this.startImport(this.data.content);
+    this.setData({ showProgressBar: true, progress: 0 });
+    this.handleJsonContent(this.data.content);
   },
+  
+  handleJsonContent(content) {
+    try {
+      console.log('[LOG-A] Raw content received:', content);
 
-  async startImport(content) {
-    if (this.data.importing) {
-      wx.showToast({ title: '正在导入中...', icon: 'none' });
-      return;
-    }
-    if (!this.data.selectedGroupId) {
-      wx.showToast({
-        title: '请先选择或新建一个分组',
-        icon: 'none'
-      });
-      return;
-    }
-    
-    let itemsToImport;
-    if (typeof content === 'string') {
-      itemsToImport = content.split('\n').filter(line => line.trim() !== '');
-    } else if (Array.isArray(content)) {
-      itemsToImport = content;
-    } else {
-      wx.showToast({ title: '导入内容格式不正确', icon: 'none' });
-      return;
-    }
-    
-    if (itemsToImport.length === 0) {
-      wx.showToast({
-        title: '内容不能为空',
-        icon: 'none'
-      });
-      return;
-    }
+      if (!content || !content.trim().startsWith('[')) {
+        throw new Error('内容不是有效的JSON数组格式，请以 [ 开头。');
+      }
 
-    this.setData({
-      importing: true,
-      showProgressBar: true,
-      progress: 0,
-    });
-    
-    await this.processInBatches(itemsToImport, this.data.selectedGroupId);
+      const parsedList = JSON.parse(content);
+      console.log('[LOG-B] After JSON.parse, the data is:', JSON.stringify(parsedList, null, 2));
+
+
+      if (!Array.isArray(parsedList)) {
+        throw new Error('JSON格式错误，顶层结构必须是一个数组。');
+      }
+      
+      const validItems = parsedList.filter(item => {
+        const hasQuestion = item && typeof item.question !== 'undefined';
+        const hasAnswer = item && typeof item.answer !== 'undefined';
+        if (!hasQuestion || !hasAnswer) {
+          console.warn('跳过无效的导入项 (缺少question或answer):', item);
+        }
+        return hasQuestion && hasAnswer;
+      });
+
+      if (validItems.length !== parsedList.length) {
+          wx.showToast({
+              title: `部分条目无效，已跳过`,
+              icon: 'none'
+          });
+      }
+
+      if (validItems.length > 0) {
+        this.setData({ importing: true });
+        console.log('[LOG-C] Calling processInBatches with valid data.');
+        this.processInBatches(validItems, this.data.groups[this.data.groupIndex].id);
+      } else {
+        wx.showToast({ title: '没有可导入的有效内容', icon: 'none' });
+        this.setData({ importing: false, showProgressBar: false });
+      }
+
+    } catch (e) {
+      console.error('导入内容解析失败', e);
+      wx.showToast({ title: `解析失败: ${e.message}`, icon: 'none', duration: 3000 });
+      this.setData({ importing: false, showProgressBar: false });
+    }
   },
 
   async processInBatches(items, groupId) {
+    console.log('[LOG-D] processInBatches received items:', JSON.stringify(items, null, 2));
     const BATCH_SIZE = 100;
     let currentIndex = 0;
     const totalItems = items.length;
@@ -176,24 +171,30 @@ Page({
     while (currentIndex < totalItems) {
       const batchItems = items.slice(currentIndex, currentIndex + BATCH_SIZE);
       const knowledgeBatch = batchItems.map(item => {
-        let question, answer;
-        if (typeof item === 'string') {
-          const parts = item.split(/\t|\|\|\|/);
-          question = parts[0] ? parts[0].trim() : '';
-          answer = parts.length > 1 ? parts.slice(1).join(' ').trim() : '';
-        } else if (typeof item === 'object' && item.question) {
-          question = item.question;
-          answer = item.answer;
+        console.log('[IMPORT-LOG-4] Mapping item inside processInBatches:', item);
+        // 确保item是对象且包含question和answer
+        if (typeof item !== 'object' || !item.question || !item.answer) {
+          console.warn('跳过无效的导入项:', item);
+          return null;
         }
-        return {
-          question, answer,
-          groupId: groupId, addTime: Date.now(), nextReviewTime: Date.now() - 1000,
-          reviewCount: 0, history: [], status: 'pending',
-          difficulty: 3, lastInterval: 0
+        const newKnowledge = {
+          question: item.question,
+          answer: item.answer,
+          media: item.media || [], // 正确处理media字段
+          groupId: groupId,
+          addTime: Date.now(),
+          nextReviewTime: Date.now() - 1000,
+          reviewCount: 0,
+          history: [],
+          status: 'pending',
+          lastInterval: 0
         };
-      }).filter(item => item.question);
+        console.log('[IMPORT-LOG-5] Mapped to new object:', newKnowledge);
+        return newKnowledge;
+      }).filter(item => item !== null); // 过滤掉无效项
 
       if (knowledgeBatch.length > 0) {
+        console.log('[LOG-E] Passing this batch to storage module:', JSON.stringify(knowledgeBatch, null, 2));
         await storage.addKnowledgeBatchToGroup(groupId, knowledgeBatch);
         totalAdded += knowledgeBatch.length;
       }
@@ -222,12 +223,15 @@ Page({
         success: async () => {
           // 跳转前加延迟，确保本地存储和批次写入完成
           await new Promise(r => setTimeout(r, 200));
-          safeGoBackToIndexWithGroupId(groupId);
+          wx.navigateTo({
+            url: `/pages/learn/learn?groupId=${groupId}`
+          });
+          // safeGoBackToIndexWithGroupId(groupId);
           resolve();
         }
       });
     });
-  }
+  },
 })
 
 // 安全返回index页面并携带groupId

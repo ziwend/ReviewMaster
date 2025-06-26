@@ -5,17 +5,16 @@
 
   <!-- 复习卡片 -->
   <block wx:elif="{{current}}">
-    <view class="review-header">
 
       <view class="stat-bar">
-        <view class="stat-row main-row">
+        <view class="stat-row">
           <text>第{{currentIndex+1}}/{{reviewList.length}}题</text>
           <block wx:if="{{current.lastRememberAgo}}">
             <text class="last-remember-label">最后记住：{{current.lastRememberAgo}}</text>
           </block>
         </view>
       </view>
-    </view>
+
     <view class="review-card card" 
           bindtouchstart="onTouchStart"
           bindtouchmove="onTouchMove"
@@ -23,6 +22,23 @@
       <block wx:if="{{!showResult}}">
         <view class="question-text only-question">
           {{current.question}}
+          <block wx:if="{{showGestureGuide}}">
+            <view class="gesture-guide-mask"
+                  bindtouchstart="onGestureGuideTouchStart"
+                  bindtouchend="onGestureGuideTouchEnd">
+              <view class="gesture-guide-content-vertical">
+                <view class="gesture-guide-title">滑动教学</view>
+                <view class="gesture-guide-col-vertical">
+                  <image class="swipe-icon" src="/components/icons/swipe_down.svg"/>
+                  <view class="gesture-guide-desc">下滑：记住了</view>
+                </view>
+                <view class="gesture-guide-col-vertical">
+                  <image class="swipe-icon" src="/components/icons/swipe_up.svg"/>
+                  <view class="gesture-guide-desc">上滑：没记住</view>
+                </view>
+              </view>
+            </view>
+          </block>
         </view>
       </block>
       <block wx:elif="{{showResult}}">
@@ -30,6 +46,14 @@
         <view class="answer-section show">
           <view class="separator"></view>
           <view class="answer-text">{{current.answer}}</view>
+          <block wx:if="{{current.media && current.media.length}}">
+            <view class="media-container">
+              <block wx:for="{{current.media}}" wx:key="url">
+                <image wx:if="{{item.type === 'image'}}" src="{{item.url}}" mode="aspectFit" class="media-image" bindtap="previewImage" data-url="{{item.url}}"/>
+                <audio wx:if="{{item.type === 'audio'}}" src="{{item.url}}" controls class="media-audio"/>
+              </block>
+            </view>
+          </block>
         </view>
       </block>
     </view>
@@ -37,20 +61,24 @@
     <!-- 操作按钮 -->
     <view class="action-buttons">
       <block wx:if="{{!showResult}}">
-        <view class="btn-wrapper btn-danger" bindtap="markResult" data-result="forget">
+      <!-- 
+        <view class="btn-common btn-danger" bindtap="markResult" data-result="forget">
           <view class="btn-text">没记住</view>
         </view>
-        <view class="btn-wrapper btn-warning" bindtap="markResult" data-result="vague">
+         -->
+        <view class="btn-common btn-warning" bindtap="markResult" data-result="vague">
           <view class="btn-text">模糊</view>
         </view>
-        <view class="btn-wrapper btn-primary" bindtap="markResult" data-result="remember">
+        <!-- 
+        <view class="btn-common btn-primary" bindtap="markResult" data-result="remember">
           <view class="btn-text">记住了</view>
         </view>
+         -->
       </block>
       <block wx:else>
 
           <block wx:if="{{showDeleteButton}}">
-            <view class="btn-wrapper btn-delete" bindtap="deleteCurrentKnowledge">
+            <view class="btn-common btn-delete" bindtap="deleteCurrentKnowledge">
               <view class="btn-text">删除</view>
             </view>
           </block>
@@ -66,18 +94,20 @@
       <image class="empty-icon" src="/components/icons/completed.svg" mode="aspectFit"></image>
       <view class="empty-state-text">太棒了！本批复习已完成！</view>
       <view class="empty-state-secondary-text">还剩 {{fullReviewList.length - globalIndex}} 个待复习</view>
-      <view class="btn-wrapper btn-primary continue-btn">
-        <view class="btn-text">继续下一批</view>
-        <button class="btn-action" bindtap="loadNextBatch"></button>
+      <view class="btn-common btn-primary" bindtap="loadNextBatch">
+              <view class="btn-text">继续下一批</view>
       </view>
+
     </block>
     <!-- 全部完成 -->
-    <block wx:else>
+    <block wx:if="{{isAllReviewed}}">
       <image class="empty-icon" src="/components/icons/completed.svg" mode="aspectFit"></image>
-      <view class="empty-state-text">{{currentGroup.name}}：本轮复习已完成！</view>
-      <view class="btn-wrapper btn-primary mastered-list-btn">
-        <view class="btn-text">已掌握列表</view>
-        <button class="btn-action" bindtap="toMastered"></button>
+      <view class="empty-state-text">本轮复习已完成！</view>
+      <view class="btn-common btn-delete" bindtap="toMastered">
+              <view class="btn-text">已掌握</view>
+      </view>
+      <view class="btn-common btn-primary" bindtap="toLearnPage">
+              <view class="btn-text">去学习</view>
       </view>
     </block>
   </view>

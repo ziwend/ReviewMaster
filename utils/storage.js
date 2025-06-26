@@ -128,6 +128,7 @@ function removeGroup(groupId) {
 
 // --- Knowledge Functions ---
 
+// 同步获取分组数据（保持兼容）
 function getGroupData(groupId) {
   const groupKey = `group-${groupId}`;
   const knowledgeIds = wx.getStorageSync(groupKey) || [];
@@ -136,6 +137,33 @@ function getGroupData(groupId) {
   }
   const knowledgeList = knowledgeIds.map(id => getKnowledgeById(id)).filter(item => item !== null);
   return knowledgeList;
+}
+
+// 新增：异步获取分组数据
+function getGroupDataAsync(groupId) {
+  return new Promise((resolve) => {
+    const groupKey = `group-${groupId}`;
+    wx.getStorage({
+      key: groupKey,
+      success: (res) => {
+        const knowledgeIds = res.data || [];
+        // 并行异步获取所有知识点
+        const promises = knowledgeIds.map(id => 
+          new Promise(resolveItem => {
+            wx.getStorage({
+              key: `knowledge-${id}`,
+              success: (kRes) => resolveItem(kRes.data),
+              fail: () => resolveItem(null)
+            });
+          })
+        );
+        Promise.all(promises).then(knowledgeList => {
+          resolve(knowledgeList.filter(item => item !== null));
+        });
+      },
+      fail: () => resolve([])
+    });
+  });
 }
 
 // 分组知识点数量内存缓存（全局）
@@ -352,18 +380,16 @@ function saveSettings(settings) {
   wx.setStorageSync('app_settings', settings);
 }
 
+// 同步刷新（保持兼容）
 function refreshAllReviewLists() {
   const allGroups = getAllGroups();
   const settings = getSettings();
   const batchSize = settings.batchSize || 20;
   allGroups.forEach(g => {
     resetTodayReviewListIfNeeded(g.id);
-    // 严格生成reviewList：只包含learned且到期，长度不超过batchSize
     const allKnowledge = getGroupData(g.id) || [];
     const now = Date.now();
-    // 先选到期的learned知识点
     const dueArr = allKnowledge.filter(k => k.learned === true && k.status !== 'mastered' && k.nextReviewTime <= now);
-    // 不足batchSize再补未复习的learned
     let batch = dueArr.slice(0, batchSize);
     if (batch.length < batchSize) {
       const notReviewed = allKnowledge.filter(k => k.learned === true && (!k.history || k.history.length === 0) && !batch.includes(k));
@@ -371,12 +397,49 @@ function refreshAllReviewLists() {
     }
     const ids = batch.map(k => k.id);
     wx.setStorageSync(`todayReviewList-${g.id}`, { date: getTodayStr(), ids });
-    // 同步更新分组统计字段
     updateGroupStats(g.id);
   });
 }
 
+// 新增：异步刷新
+async function refreshAllReviewListsAsync() {
+  const allGroups = getAllGroups();
+  const settings = getSettings();
+  const batchSize = settings.batchSize || 20;
+  
+  // 并行处理所有分组
+  await Promise.all(allGroups.map(async (g) => {
+    resetTodayReviewListIfNeeded(g.id);
+    try {
+      const allKnowledge = await getGroupDataAsync(g.id);
+      const now = Date.now();
+      const dueArr = allKnowledge.filter(k => k.learned === true && k.status !== 'mastered' && k.nextReviewTime <= now);
+      let batch = dueArr.slice(0, batchSize);
+      if (batch.length < batchSize) {
+        const notReviewed = allKnowledge.filter(k => k.learned === true && (!k.history || k.history.length === 0) && !batch.includes(k));
+        batch = batch.concat(notReviewed.slice(0, batchSize - batch.length));
+      }
+      const ids = batch.map(k => k.id);
+      
+      // 异步存储
+      await new Promise(resolve => {
+        wx.setStorage({
+          key: `todayReviewList-${g.id}`,
+          data: { date: getTodayStr(), ids },
+          success: () => resolve(),
+          fail: resolve
+        });
+      });
+      
+      updateGroupStats(g.id);
+    } catch (e) {
+      console.error(`刷新分组 ${g.id} 失败`, e);
+    }
+  }));
+}
+
 async function addKnowledgeBatchToGroup(groupId, knowledgeBatch) {
+  console.log('[LOG-F] storage.addKnowledgeBatchToGroup received batch:', JSON.stringify(knowledgeBatch, null, 2));
   if (!knowledgeBatch || knowledgeBatch.length === 0) {
     const group = getAllGroups().find(g => g.id === groupId);
     return {
@@ -395,7 +458,6 @@ async function addKnowledgeBatchToGroup(groupId, knowledgeBatch) {
     const newKnowledgeId = nextId;
     knowledge.id = newKnowledgeId;
     knowledge.media = knowledge.media || [];
-    knowledge.difficulty = knowledge.difficulty || 3;
     knowledge.addTime = knowledge.addTime || Date.now();
     knowledge.nextReviewTime = knowledge.nextReviewTime || Date.now();
     knowledge.learned = typeof knowledge.learned === 'boolean' ? knowledge.learned : false;
@@ -447,5 +509,6 @@ module.exports = {
   getSettings,
   saveSettings,
   refreshAllReviewLists,
+  refreshAllReviewListsAsync,
   updateGroupStats,
 };

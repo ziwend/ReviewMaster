@@ -71,7 +71,7 @@ Page({
     }
     const newGroup = storage.addGroup(this.data.newGroupName);
     groupKnowledgeCountMap[newGroup.id] = 0; // 新增分组，缓存初始化为0
-    this.loadGroups();
+    // this.loadGroups();
     wx.navigateTo({
       url: `/pages/import/import?groupId=${newGroup.id}`
     });

@@ -1,0 +1,75 @@
+<!--pages/learn.wxml-->
+<view class="container learn-container">
+    <!-- 学习卡片 -->
+    <block wx:if="{{current}}">
+        <view class="stat-bar">
+        <view class="stat-row">
+          <text>第{{currentBatchIndex}}/{{totalBatchCount}}批 第{{currentIndex+1}}/{{unlearnedList.length}}题</text>
+        </view>
+      </view>
+        <view class="learn-card card" bindtouchstart="onTouchStart" bindtouchmove="onTouchMove" bindtouchend="onTouchEnd">
+            <view class="question-text">
+                  <text>{{current.question}}</text>
+            </view>
+            <view class="answer-section">
+                <text class="answer-text">{{current.answer}}</text>
+                <block wx:for="{{current.media}}" wx:key="url">
+                    <image wx:if="{{item.type === 'image'}}" src="{{item.url}}" mode="aspectFit" class="media-image" bindtap="previewImage" data-url="{{item.url}}"/>
+                    <audio wx:if="{{item.type === 'audio'}}" src="{{item.url}}" controls class="media-audio"/>
+                </block>
+            </view>
+        </view>
+    </block>
+    <block wx:elif="{{isBatchCompleted}}">
+        <view class="empty-state learn-empty">
+            <image class="empty-icon" src="/components/icons/completed.svg" mode="aspectFit"></image>
+            <view class="empty-state-text">太棒了！本批学习已完成！</view>
+            <view class="btn-common btn-delete" bindtap="loadNextBatch">
+                <view class="btn-text">下一批</view>
+            </view>
+            <view class="btn-common btn-primary" bindtap="toReviewPage">
+                <view class="btn-text">去复习</view>
+            </view>
+        </view>
+    </block>
+    <block wx:elif="{{isAllLearned}}">
+        <view class="empty-state learn-empty">
+            <image class="empty-icon" src="/components/icons/completed.svg" mode="aspectFit"></image>
+            <view class="empty-state-text">{{currentGroup.name}}：暂无未学习知识点！</view>
+            <view class="btn-common btn-primary" bindtap="toReviewPage">
+                <view class="btn-text">去复习</view>
+            </view>
+        </view>
+    </block>
+    <block wx:else>
+        <!-- 空状态 -->
+        <view class="empty-state learn-empty">
+            <image class="empty-icon" src="/components/icons/completed.svg" mode="aspectFit"></image>
+            <view class="empty-state-text">{{currentGroup.name}}：暂无未学习知识点！</view>
+            <view class="btn-common btn-primary review-btn">
+                <view class="btn-text">待复习列表</view>
+                <button class="btn-action" bindtap="toReviewPage"></button>
+            </view>
+        </view>
+    </block>
+
+    <block wx:if="{{showGestureGuide}}">
+        <view class="gesture-guide-mask"
+              bindtouchstart="onGestureGuideTouchStart"
+              bindtouchend="onGestureGuideTouchEnd">
+            <view class="gesture-guide-content">
+                <view class="gesture-guide-title">滑动教学</view>
+                <view class="gesture-guide-row">
+                    <view class="gesture-guide-col">
+                        <image class="swipe-icon" src="/components/icons/swipe_left.svg"/>
+                        <view class="gesture-guide-desc">左滑：表示已学会该知识点</view>
+                    </view>
+                    <view class="gesture-guide-col">
+                        <image class="swipe-icon" src="/components/icons/swipe_right.svg"/>
+                        <view class="gesture-guide-desc">右滑：表示不再复习，将删除该知识点</view>
+                    </view>
+                </view>
+            </view>
+        </view>
+    </block>
+</view>

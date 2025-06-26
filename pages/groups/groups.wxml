@@ -44,7 +44,7 @@
   <!-- 空状态 -->
   <view class="empty-state" wx:else>
     <image class="empty-icon" src="/components/icons/empty.svg" mode="aspectFit"></image>
-    <view class="empty-state-text">暂无任何分组，快去添加一个吧！</view>
+    <view class="empty-state-text">暂无任何待学习内容分组，快去添加一个吧！</view>
     <!-- 添加分组（空状态时） -->
     <view class="add-group-form">
       <view class="input-wrapper">

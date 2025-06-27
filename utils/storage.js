@@ -251,8 +251,6 @@ function getTodayReviewList(groupId, batchSize = 20) {
   const today = getTodayStr();
   let cache = wx.getStorageSync(key);
   if (cache && cache.date === today && Array.isArray(cache.ids)) {
-    // 命中缓存
-    console.log('[getTodayReviewList] 命中缓存:', key, cache);
     return cache.ids
       .map(id => getKnowledgeById(id))
       .filter(k => k && k.status !== 'mastered' && k.nextReviewTime <= Date.now() && k.learned);
@@ -261,8 +259,6 @@ function getTodayReviewList(groupId, batchSize = 20) {
   const all = getGroupData(groupId) || [];
   const now = Date.now();
   if (all.length === 0) {
-    // 分组无知识点，不生成缓存
-    console.log('[getTodayReviewList] 分组无知识点，不生成缓存:', key);
     return [];
   }
   // 1. 先选due的
@@ -277,7 +273,6 @@ function getTodayReviewList(groupId, batchSize = 20) {
   const ids = batch.map(k => k.id);
   if (ids.length > 0) {
     wx.setStorageSync(key, { date: today, ids });
-    console.log('[getTodayReviewList] 生成缓存:', key, { date: today, ids }, '知识点总数:', all.length);
   } else {
     // 不写入空缓存
     console.log('[getTodayReviewList] batch为空，不写入缓存:', key);
@@ -291,18 +286,23 @@ function cleanEmptyTodayReviewListCache(groupId) {
   const cache = wx.getStorageSync(key);
   if (cache && Array.isArray(cache.ids) && cache.ids.length === 0) {
     wx.removeStorageSync(key);
-    console.log('[cleanEmptyTodayReviewListCache] 清理历史空缓存:', key);
   }
 }
 
 // 日期变更时重置今日批次
+/**
+ * 检查并重置当天的复习列表缓存（如果需要）
+ * 
+ * 根据当前日期判断缓存是否过期，若过期则清除对应群组的缓存数据
+ * 
+ * @param {string} groupId - 群组ID，用于构建存储键名
+ */
 function resetTodayReviewListIfNeeded(groupId) {
   const key = `todayReviewList-${groupId}`;
   const today = getTodayStr();
   let cache = wx.getStorageSync(key);
   if (!cache || cache.date !== today) {
     wx.removeStorageSync(key);
-    console.log('[resetTodayReviewListIfNeeded] 日期变更，重置今日复习缓存:', key);
   }
 }
 
@@ -361,6 +361,8 @@ const defaultSettings = {
   batchSize: 20,
   delayRemember: 10, // seconds
   delayForget: 30, // seconds
+  efactor: 2.5, // 新增：全局默认efactor
+  groupEfactorMap: {} // 新增：分组efactor映射
 };
 
 function getDefaultSettings() {
@@ -368,16 +370,20 @@ function getDefaultSettings() {
 }
 
 function getSettings() {
-  const settings = wx.getStorageSync('app_settings');
-  if (settings) {
-    // 合并默认设置，防止新增设置项的用户本地没有
-    return { ...getDefaultSettings(), ...settings };
+  const app = typeof getApp === 'function' ? getApp() : null;
+  if (app && app.globalData && app.globalData.settings) {
+    return { ...getDefaultSettings(), ...app.globalData.settings };
   }
-  return getDefaultSettings();
+  const settings = wx.getStorageSync('app_settings');
+  const merged = settings ? { ...getDefaultSettings(), ...settings } : getDefaultSettings();
+  if (app && app.globalData) app.globalData.settings = merged;
+  return merged;
 }
 
 function saveSettings(settings) {
   wx.setStorageSync('app_settings', settings);
+  const app = typeof getApp === 'function' ? getApp() : null;
+  if (app && app.globalData) app.globalData.settings = settings;
 }
 
 // 同步刷新（保持兼容）
@@ -439,7 +445,6 @@ async function refreshAllReviewListsAsync() {
 }
 
 async function addKnowledgeBatchToGroup(groupId, knowledgeBatch) {
-  console.log('[LOG-F] storage.addKnowledgeBatchToGroup received batch:', JSON.stringify(knowledgeBatch, null, 2));
   if (!knowledgeBatch || knowledgeBatch.length === 0) {
     const group = getAllGroups().find(g => g.id === groupId);
     return {
@@ -496,6 +501,7 @@ module.exports = {
   updateGroup,
   removeGroup,
   getGroupData,
+  getGroupDataAsync,
   saveKnowledge,
   removeKnowledge,
   getKnowledgeById,

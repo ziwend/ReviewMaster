@@ -60,43 +60,83 @@ Page({
   async importFromTxt() {
     this.setData({ showProgressBar: true, progress: 0, importing: true });
 
-    let tempFilePath;
-    try {
-      const res = await wx.chooseMessageFile({
-        count: 1,
-        type: 'file',
-        extension: ['json'],
-      });
-      tempFilePath = res.tempFiles[0].path;
-    } catch (err) {
-      if (err.errMsg && err.errMsg.includes('cancel')) {
-        this.setData({ showProgressBar: false, importing: false });
-        return; // 用户取消选择
-      }
-      console.error("选择文件失败", err);
-      wx.showToast({ title: '选择文件失败', icon: 'none' });
-      this.setData({ showProgressBar: false, importing: false });
-      return;
-    }
-
-    try {
-      const fs = wx.getFileSystemManager();
-      const content = await new Promise((resolve, reject) => {
-        fs.readFile({
-          filePath: tempFilePath,
-          encoding: 'utf-8',
-          success: (res) => resolve(res.data),
-          fail: reject,
+    // 优先使用 wx.miniapp.chooseFile
+    if (typeof wx !== 'undefined' && wx.miniapp && typeof wx.miniapp.chooseFile === 'function') {
+      try {
+        wx.miniapp.chooseFile({
+          count: 1,
+          success: (res) => {
+            const tempFilePath = res.tempFiles[0].path;
+            const fs = wx.getFileSystemManager();
+            fs.readFile({
+              filePath: tempFilePath,
+              encoding: 'utf-8',
+              success: (res) => {
+                this.handleJsonContent(res.data);
+              },
+              fail: (e) => {
+                wx.showToast({ title: '读取文件失败', icon: 'none' });
+                this.setData({ showProgressBar: false, importing: false });
+              }
+            });
+          },
+          fail: (err) => {
+            wx.showToast({ title: '选择文件失败', icon: 'none' });
+            this.setData({ showProgressBar: false, importing: false });
+          }
         });
-      });
-
-      this.handleJsonContent(content);
-
-    } catch (e) {
-      console.error('读取文件失败', e);
-      wx.showToast({ title: `读取文件失败: ${e.message}`, icon: 'none', duration: 3000 });
-      this.setData({ importing: false, showProgressBar: false });
+        return;
+      } catch (err) {
+        wx.showToast({ title: '选择文件失败', icon: 'none' });
+        this.setData({ showProgressBar: false, importing: false });
+        return;
+      }
     }
+
+    // 微信小程序原生环境
+    let isMiniProgram = false;
+    try {
+      const sysInfo = wx.getSystemInfoSync && wx.getSystemInfoSync();
+      isMiniProgram = sysInfo && sysInfo.platform && (
+        sysInfo.platform === 'devtools' ||
+        sysInfo.platform === 'android' ||
+        sysInfo.platform === 'ios'
+      );
+    } catch (e) {
+      isMiniProgram = false;
+    }
+
+    if (isMiniProgram && wx.chooseMessageFile) {
+      try {
+        const res = await wx.chooseMessageFile({
+          count: 1,
+          type: 'file',
+          extension: ['json'],
+        });
+        const tempFilePath = res.tempFiles[0].path;
+        const fs = wx.getFileSystemManager();
+        const content = await new Promise((resolve, reject) => {
+          fs.readFile({
+            filePath: tempFilePath,
+            encoding: 'utf-8',
+            success: (res) => resolve(res.data),
+            fail: reject,
+          });
+        });
+        this.handleJsonContent(content);
+        return;
+      } catch (err) {
+        wx.showToast({ title: '当前小程序环境不支持导入文件', icon: 'none' });
+        this.setData({ showProgressBar: false, importing: false });
+        return;
+      }
+    }
+
+    // 兜底：当前环境不支持导入
+    wx.showToast
+      ? wx.showToast({ title: '当前环境不支持导入', icon: 'none' })
+      : alert('当前环境不支持导入');
+    this.setData({ showProgressBar: false, importing: false });
   },
 
   startImportFromTextarea() {
@@ -106,15 +146,11 @@ Page({
   
   handleJsonContent(content) {
     try {
-      console.log('[LOG-A] Raw content received:', content);
-
       if (!content || !content.trim().startsWith('[')) {
         throw new Error('内容不是有效的JSON数组格式，请以 [ 开头。');
       }
 
       const parsedList = JSON.parse(content);
-      console.log('[LOG-B] After JSON.parse, the data is:', JSON.stringify(parsedList, null, 2));
-
 
       if (!Array.isArray(parsedList)) {
         throw new Error('JSON格式错误，顶层结构必须是一个数组。');
@@ -138,7 +174,7 @@ Page({
 
       if (validItems.length > 0) {
         this.setData({ importing: true });
-        console.log('[LOG-C] Calling processInBatches with valid data.');
+
         this.processInBatches(validItems, this.data.groups[this.data.groupIndex].id);
       } else {
         wx.showToast({ title: '没有可导入的有效内容', icon: 'none' });
@@ -153,7 +189,6 @@ Page({
   },
 
   async processInBatches(items, groupId) {
-    console.log('[LOG-D] processInBatches received items:', JSON.stringify(items, null, 2));
     const BATCH_SIZE = 100;
     let currentIndex = 0;
     const totalItems = items.length;
@@ -170,9 +205,7 @@ Page({
 
     while (currentIndex < totalItems) {
       const batchItems = items.slice(currentIndex, currentIndex + BATCH_SIZE);
-      const knowledgeBatch = batchItems.map(item => {
-        console.log('[IMPORT-LOG-4] Mapping item inside processInBatches:', item);
-        // 确保item是对象且包含question和answer
+      const knowledgeBatch = batchItems.map(item => {        // 确保item是对象且包含question和answer
         if (typeof item !== 'object' || !item.question || !item.answer) {
           console.warn('跳过无效的导入项:', item);
           return null;
@@ -189,12 +222,11 @@ Page({
           status: 'pending',
           lastInterval: 0
         };
-        console.log('[IMPORT-LOG-5] Mapped to new object:', newKnowledge);
+
         return newKnowledge;
       }).filter(item => item !== null); // 过滤掉无效项
 
       if (knowledgeBatch.length > 0) {
-        console.log('[LOG-E] Passing this batch to storage module:', JSON.stringify(knowledgeBatch, null, 2));
         await storage.addKnowledgeBatchToGroup(groupId, knowledgeBatch);
         totalAdded += knowledgeBatch.length;
       }
@@ -222,9 +254,10 @@ Page({
         showCancel: false,
         success: async () => {
           // 跳转前加延迟，确保本地存储和批次写入完成
-          await new Promise(r => setTimeout(r, 200));
+          // 确保数据写入完成
+          await new Promise(r => setTimeout(r, 500));
           wx.navigateTo({
-            url: `/pages/learn/learn?groupId=${groupId}`
+            url: `/pages/learn/learn?groupId=${groupId}&forceRefresh=true`
           });
           // safeGoBackToIndexWithGroupId(groupId);
           resolve();

@@ -23,6 +23,28 @@
     <view class="setting-desc">回答错误后，自动跳转到下一题的等待时间（建议 1-300）。</view>
   </view>
 
+  <view class="setting-group">
+    <view class="setting-group-title">全局默认efactor</view>
+    <view class="setting-item">
+      <view class="setting-label">efactor</view>
+      <input class="setting-input" type="number" value="{{settings.efactor}}" data-key="efactor" bindinput="handleInputChange" step="0.01" min="1.3" max="3.0" />
+    </view>
+    <view class="setting-desc">用于分组未单独设置时的默认易记因子（建议1.3-3.0）。</view>
+  </view>
+
+  <view class="setting-group">
+    <view class="setting-group-title">分组efactor设置</view>
+    <block wx:for="{{groups}}" wx:key="id">
+      <view class="setting-item">
+        <view class="setting-label">{{item.name}}</view>
+        <input class="setting-input" type="number"
+          value="{{groupEfactorMap[item.id] !== undefined ? groupEfactorMap[item.id] : settings.efactor}}"
+          data-groupid="{{item.id}}" bindinput="handleGroupEfactorInput" step="0.01" min="1.3" max="3.0" />
+      </view>
+    </block>
+    <view class="setting-desc">每个分组可单独设置efactor，未设置时使用全局默认。</view>
+  </view>
+
   <view class="button-area">
     <button class="btn btn-restore" bindtap="handleRestore">恢复默认</button>
     <button class="btn btn-save" type="primary" bindtap="handleSave">保存设置</button>

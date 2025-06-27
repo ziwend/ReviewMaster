@@ -12,12 +12,37 @@ function fromNow(ts) {
   return `${Math.floor(diff/86400)}天前`;
 }
 
-let refreshTimer = null;
+// 在Page外部添加
+let swipeHintThrottleTimer = null;
+let lastSwipeHint = '';
+let lastSwipeHintX = null;
+let lastSwipeHintY = null;
+
+// 在滑动处理函数（如onTouchMove）中，替换原有setData逻辑：
+function updateSwipeHint(newHint, x, y) {
+  if (
+    newHint === lastSwipeHint &&
+    x === lastSwipeHintX &&
+    y === lastSwipeHintY
+  ) {
+    return;
+  }
+  lastSwipeHint = newHint;
+  lastSwipeHintX = x;
+  lastSwipeHintY = y;
+  if (swipeHintThrottleTimer) return;
+  swipeHintThrottleTimer = setTimeout(() => {
+    this.setData({
+      swipeHint: newHint,
+      swipeHintX: x,
+      swipeHintY: y
+    });
+    swipeHintThrottleTimer = null;
+  }, 100);
+}
 
 Page({
   data: {
-    groups: [],
-    groupIndex: 0,
     fullUnlearnedList: [], // 新增：全量未学会id
     unlearnedList: [], // 当前批次未学会id
     currentIndex: 0,
@@ -31,15 +56,17 @@ Page({
     gestureGuideTouchStartX: 0,
     currentBatchIndex: 0,
     totalBatchCount: 0,
-    initialUnlearnedCount: null // 用于精确计算批次
+    initialUnlearnedCount: null, // 用于精确计算批次
+    swipeHint: '', // 新增：滑动提示文本
+    swipeHintX: null, // 新增：滑动提示横坐标
+    swipeHintY: null, // 新增：滑动提示纵坐标
+    groupId: null // 关键：写入data，便于后续分组定位
   },
 
   onLoad(options) {
-    let { groupId } = options;
     const groups = getApp().globalData.groups;
-    if (!groupId && groups && groups.length > 0) {
-      groupId = groups[0].id;
-    }
+    let { groupId } = options;
+
     const currentGroup = groups.find(g => g.id == groupId) || (groups && groups[0]) || {};
     if (currentGroup && currentGroup.name) {
       wx.setNavigationBarTitle({ title: currentGroup.name });
@@ -48,7 +75,8 @@ Page({
     this.setData({ 
       showGestureGuide: !hideGuide, 
       gestureGuideActive: !hideGuide,
-      initialUnlearnedCount: null // 每次加载页面重置，开始新的学习会话
+      initialUnlearnedCount: null, // 每次加载页面重置，开始新的学习会话
+      groupId // 关键：写入data，便于后续分组定位
     });
   },
 
@@ -58,45 +86,18 @@ Page({
     try {
       const settings = storage.getSettings();
       this.setData({ batchSize: settings.batchSize || 20 });
-      await storage.refreshAllReviewListsAsync && storage.refreshAllReviewListsAsync();
       this.refreshGroupsAndData();
     } catch (e) {
       console.error('首页数据刷新失败', e);
     } finally {
       wx.hideLoading();
     }
-    if (refreshTimer) clearInterval(refreshTimer);
-    refreshTimer = setInterval(async () => {
-      try {
-        await storage.refreshAllReviewListsAsync && storage.refreshAllReviewListsAsync();
-        this.refreshGroupsAndData();
-      } catch (e) {
-        console.error('定时刷新失败', e);
-      }
-    }, 300000);
-  },
-
-  onHide() {
-    if (refreshTimer) clearInterval(refreshTimer);
-  },
-
-  onUnload() {
-    if (refreshTimer) clearInterval(refreshTimer);
   },
 
   refreshGroupsAndData() {
-    const groups = getApp().globalData.groups;
-    let groupIndex = 0;
-    const groupsWithStats = groups.map(g => ({
-      ...g,
-      displayName: `${g.name}（${g.dueCount || 0}待复习，${g.lastReviewTime ? fromNow(g.lastReviewTime)+'复习' : '未复习'}）`
-    }));
-    if (groupIndex >= groupsWithStats.length) {
-      groupIndex = Math.max(0, groupsWithStats.length - 1);
-    }
-    this.setData({ groups: groupsWithStats, groupIndex });
-    if (groupsWithStats.length > 0) {
-      this.loadFullUnlearned(groupsWithStats[groupIndex].id);
+    const { groupId } = this.data;
+    if (groupId) {
+      this.loadFullUnlearned(groupId);
     } else {
       this.setData({
         fullUnlearnedList: [],
@@ -123,20 +124,37 @@ Page({
     }
   },
 
-  loadFullUnlearned(groupId) {
-    const all = storage.getUnlearnedKnowledge(groupId);
-    let { initialUnlearnedCount } = this.data;
+  async loadFullUnlearned(groupId) {
+    this.setData({ pageReady: false });
+    try {
+      // 使用异步方法获取未学习列表
+      const all = await storage.getGroupDataAsync(groupId).then(list => 
+        list.filter(k => !k.learned)
+      );
 
-    // 如果是本会话首次加载，则记录初始总数
-    if (initialUnlearnedCount === null) {
-      initialUnlearnedCount = all.length;
+      let { initialUnlearnedCount } = this.data;
+
+      // 如果是本会话首次加载，则记录初始总数
+      if (initialUnlearnedCount === null) {
+        initialUnlearnedCount = all.length;
+      }
+      
+      this.setData({ 
+        fullUnlearnedList: all,
+        initialUnlearnedCount
+      });
+      this.loadNextBatch();
+    } catch (e) {
+      console.error('加载未学习列表失败', e);
+      this.setData({ 
+        pageReady: true,
+        isAllLearned: false
+      });
+      wx.showToast({
+        title: '加载数据失败，请重试',
+        icon: 'none'
+      });
     }
-    
-    this.setData({ 
-      fullUnlearnedList: all,
-      initialUnlearnedCount
-    });
-    this.loadNextBatch();
   },
 
   loadNextBatch() {
@@ -147,7 +165,11 @@ Page({
       initialUnlearnedCount = fullUnlearnedList.length;
     }
     
-    if (!fullUnlearnedList.length) {
+    // 正确计算是否所有知识点都已学习
+    const totalUnlearned = fullUnlearnedList.length;
+    const isAllLearned = totalUnlearned === 0;
+    
+    if (isAllLearned) {
       this.setData({ 
         isAllLearned: true, 
         isBatchCompleted: false, 
@@ -156,7 +178,8 @@ Page({
         currentIndex: 0, 
         currentBatchIndex: 0, 
         totalBatchCount: 0,
-        pageReady: true // 页面已就绪
+        pageReady: true,
+        fullUnlearnedList: [] // 新增，彻底清空未学会列表，防止UI残留
       });
       return;
     }
@@ -179,6 +202,7 @@ Page({
       totalBatchCount,
       pageReady: true // 页面已就绪
     });
+
   },
 
   markLearned() {
@@ -186,11 +210,6 @@ Page({
     if (!unlearnedList.length) return;
 
     const currentKnowledge = unlearnedList[currentIndex];
-    wx.showToast({
-      title: `${currentKnowledge.question} 已学会`,
-      icon: 'success',
-      duration: 1000
-    });
     setTimeout(() => {
       currentKnowledge.learned = true;
       storage.saveKnowledge(currentKnowledge);
@@ -224,6 +243,17 @@ Page({
 
   onTouchMove(e) {
     this.touchDeltaX = e.touches[0].clientX - this.touchStartX;
+    // 新增：滑动方向提示和位置
+    const threshold = 30;
+    const clientX = e.touches[0].clientX;
+    const clientY = e.touches[0].clientY;
+    if (this.touchDeltaX <= -threshold) {
+      updateSwipeHint.call(this, '左滑表示已学会', clientX, clientY);
+    } else if (this.touchDeltaX >= threshold) {
+      updateSwipeHint.call(this, '右滑表示删除', clientX, clientY);
+    } else {
+      updateSwipeHint.call(this, '', clientX, clientY);
+    }
   },
 
   onTouchEnd(e) {
@@ -237,50 +267,61 @@ Page({
     }
     this.touchStartX = 0;
     this.touchDeltaX = 0;
+    if (swipeHintThrottleTimer) {
+      clearTimeout(swipeHintThrottleTimer);
+      swipeHintThrottleTimer = null;
+    }
+    this.setData({
+      swipeHint: '',
+      swipeHintX: null,
+      swipeHintY: null
+    });
+    lastSwipeHint = '';
+    lastSwipeHintX = null;
+    lastSwipeHintY = null;
   },
 
   // 永久删除当前知识点
   deleteCurrentKnowledge() {
-    let { current, groups, groupIndex } = this.data;
+    let { current, groupId } = this.data;
     if (!current) return;
 
     wx.showModal({
       title: '删除确认',
-      content: `确定要永久删除"${current.question}"吗？此操作不可撤销。`,
+      content: `确定要永久删除"${current.question}"，不再复习吗？此操作不可撤销。`,
       success: async (res) => {
         if (res.confirm) {
-          await storage.removeKnowledge(groups[groupIndex].id, current.id);
-          
+          await storage.removeKnowledge(groupId, current.id);
           // 重新从 storage 加载数据，这是确保页面状态完全同步的最安全方法
-          // 这可以根除因手动操作 data 而可能引入的各种不一致问题
-          this.loadFullUnlearned(groups[groupIndex].id);
-          
-          wx.showToast({ title: '已删除', icon: 'success' });
+          this.loadFullUnlearned(groupId);
         }
       }
     });
   },
 
-  // 跳转到分组管理
-  toGroups() {
-    wx.navigateTo({ url: '/pages/groups/groups' });
+  // 新增：用于"下一批"按钮，强制刷新未学会列表
+  loadFullUnlearnedHandler() {
+    const { groupId } = this.data;
+    if (groupId) {
+      this.loadFullUnlearned(groupId);
+    }
   },
 
-  toReviewPage() {
-    const { groups, groupIndex } = this.data;
-    if (!groups.length) {
-      wx.showToast({ title: '请先新建分组', icon: 'none' });
-      return;
-    }
-    const id = groups[groupIndex].id;
-    wx.navigateTo({ url: `/pages/review/review?groupId=${id}` });
+  async toReviewPage() {
+    // 跳转前主动刷新今日复习批次
+    await storage.refreshAllReviewLists();
+    wx.navigateTo({ url: `/pages/review/review?groupId=${this.data.groupId}` });
   },
 
   onGestureGuideTouchStart(e) {
+    // 阻止事件冒泡，防止传递到下层卡片
+    if (e.stopPropagation) e.stopPropagation();
     this.setData({ gestureGuideTouchStartX: e.touches[0].clientX });
   },
 
   onGestureGuideTouchEnd(e) {
+    // 阻止事件冒泡，防止传递到下层卡片
+    if (e.stopPropagation) e.stopPropagation();
     if (!this.data.gestureGuideActive) return;
     const deltaX = e.changedTouches[0].clientX - this.data.gestureGuideTouchStartX;
     if (deltaX <= -60) {
@@ -291,7 +332,11 @@ Page({
         title: '提示',
         content: '您向左滑动，表示已学会该知识点，将跳转至下一个知识点',
         showCancel: true,
-        success: () => { this.markLearned(); }
+        success: (res) => {
+          if (res.confirm) {
+            this.markLearned();
+          }
+        }
       });
     } else if (deltaX >= 60) {
       // 右滑
@@ -299,9 +344,13 @@ Page({
       wx.setStorageSync('hideLearnGestureGuide', true);
       wx.showModal({
         title: '提示',
-        content: '您向右滑动，表示不需要学习该知识点，将直接删除',
-        showCancel: false,
-        success: () => { this.deleteCurrentKnowledge(); }
+        content: '您向右滑动，表示不需要再复习该知识点，将删除',
+        showCancel: true,
+        success: (res) => {
+          if (res.confirm) {
+            this.deleteCurrentKnowledge();
+          }
+        }
       });
     }
   }

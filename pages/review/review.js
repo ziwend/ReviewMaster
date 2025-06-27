@@ -17,6 +17,62 @@ function formatTimeAgo(timestamp) {
   return Math.floor(diff / 86400000) + '天前';
 }
 
+// 在Page外部添加
+let qSwipeHintThrottleTimer = null;
+let lastQSwipeHint = '';
+let lastQSwipeHintX = null;
+let lastQSwipeHintY = null;
+
+let aSwipeHintThrottleTimer = null;
+let lastASwipeHint = '';
+let lastASwipeHintX = null;
+let lastASwipeHintY = null;
+
+// 在滑动处理函数（如onQuestionTouchMove）中，替换原有setData逻辑：
+function updateQSwipeHint(newHint, x, y) {
+  if (
+    newHint === lastQSwipeHint &&
+    x === lastQSwipeHintX &&
+    y === lastQSwipeHintY
+  ) {
+    return;
+  }
+  lastQSwipeHint = newHint;
+  lastQSwipeHintX = x;
+  lastQSwipeHintY = y;
+  if (qSwipeHintThrottleTimer) return;
+  qSwipeHintThrottleTimer = setTimeout(() => {
+    this.setData({
+      qSwipeHint: newHint,
+      qSwipeHintX: x,
+      qSwipeHintY: y
+    });
+    qSwipeHintThrottleTimer = null;
+  }, 100);
+}
+
+function updateASwipeHint(newHint, x, y) {
+  if (
+    newHint === lastASwipeHint &&
+    x === lastASwipeHintX &&
+    y === lastASwipeHintY
+  ) {
+    return;
+  }
+  lastASwipeHint = newHint;
+  lastASwipeHintX = x;
+  lastASwipeHintY = y;
+  if (aSwipeHintThrottleTimer) return;
+  aSwipeHintThrottleTimer = setTimeout(() => {
+    this.setData({
+      aSwipeHint: newHint,
+      aSwipeHintX: x,
+      aSwipeHintY: y
+    });
+    aSwipeHintThrottleTimer = null;
+  }, 100);
+}
+
 Page({
   data: {
     groups: [],
@@ -38,7 +94,20 @@ Page({
     showDeleteButton: false,
     showGestureGuide: true,
     gestureGuideActive: true,
-    gestureGuideTouchStartY: 0
+    gestureGuideTouchStartY: 0,
+    qTouchStartY: 0,
+    qTouchDeltaY: 0,
+    aTouchStartX: 0,
+    aTouchDeltaX: 0,
+    qSwipeHint: '', // 问题区滑动提示
+    qSwipeHintX: null,
+    qSwipeHintY: null,
+    aSwipeHint: '', // 答案区滑动提示
+    aSwipeHintX: null,
+    aSwipeHintY: null,
+    remainingCount: 0, // 新增：剩余待复习数量
+    mastered: [], // 新增：已掌握知识点列表
+    unlearned: [] // 新增：未学会知识点列表
   },
 
   settings: {}, // 存储设置
@@ -80,7 +149,11 @@ Page({
     // 获取所有待复习id
     const cache = wx.getStorageSync(`todayReviewList-${groupId}`);
     const fullReviewList = cache && Array.isArray(cache.ids) ? cache.ids : [];
-    this.setData({ fullReviewList });
+    // 新增：获取 mastered 和 unlearned
+    const allKnowledge = storage.getGroupData(groupId) || [];
+    const mastered = allKnowledge.filter(k => k.status === 'mastered');
+    const unlearned = allKnowledge.filter(k => !k.learned);
+    this.setData({ fullReviewList, mastered, unlearned });
     this.loadNextBatch();
   },
 
@@ -97,29 +170,31 @@ Page({
       currentIndex: 0,
       isBatchCompleted: false,
       isAllReviewed: false,
-      loading: false // 这里确保关闭 loading
+      loading: false, // 这里确保关闭 loading
+      showResult: false, // 新增，切换批次时重置答案显示
+      showDeleteButton: false // 新增，切换批次时重置删除按钮
     });
   },
 
   // 统一处理复习反馈
   handleReviewFeedback(type) {
     const quality = FEEDBACK_SCORE[type.toUpperCase()] || 0;
-    let { current } = this.data;
+    let { current, groupId } = this.data;
     if (!current) return;
-    
     this.setData({ 
       showDeleteButton: type === 'remember',
       showResult: true 
     });
-    
     // 首次复习时初始化算法字段
     if (!current.learned) {
       current.learned = true;
       // 初始化SM-2算法字段
       if (typeof current.repetition === 'undefined') current.repetition = 0;
-      if (typeof current.efactor === 'undefined') current.efactor = 2.5;
+      // 新增：优先用分组efactor
+      const settings = storage.getSettings();
+      let groupEfactor = (settings.groupEfactorMap && settings.groupEfactorMap[groupId]) || settings.efactor || 2.5;
+      if (typeof current.efactor === 'undefined') current.efactor = groupEfactor;
     }
-    
     // 使用SM-2算法更新知识点
     current = storage.updateKnowledgeBySM2(current, quality);
     // 状态判断
@@ -155,12 +230,12 @@ Page({
     this.handleReviewFeedback(type);
   },
 
-  nextOne() {
+  async nextOne() {
     if (this.timerId) {
       clearTimeout(this.timerId);
       this.timerId = null;
     }
-    let { currentIndex, reviewList, fullReviewList, batchSize } = this.data;
+    let { currentIndex, reviewList, batchSize, groupId } = this.data;
     currentIndex++;
     if (currentIndex < reviewList.length) {
       let current = reviewList[currentIndex];
@@ -172,17 +247,74 @@ Page({
         showDeleteButton: false
       });
     } else {
-      // 本批复习完
-      fullReviewList = fullReviewList.slice(batchSize);
-      if (fullReviewList.length) {
-        this.setData({ isBatchCompleted: true, fullReviewList, reviewList: [], current: null, currentIndex: -1 });
+      // 本批次用完，主动刷新所有分组的今日批次
+      await storage.refreshAllReviewLists();
+      const latestBatch = await storage.getTodayReviewList(groupId, batchSize);
+      const todayList = await storage.getTodayReviewList(groupId, batchSize);
+      if (latestBatch && latestBatch.length > 0) {
+        this.setData({
+          isBatchCompleted: true,
+          isAllReviewed: false,
+          fullReviewList: latestBatch.map(k => k.id),
+          reviewList: [],
+          current: null,
+          currentIndex: -1,
+          remainingCount: todayList.length,
+          mastered: [],
+          unlearned: []
+        });
+        // 新增：刷新 mastered 和 unlearned
+        const allKnowledge = storage.getGroupData(groupId) || [];
+        const mastered = allKnowledge.filter(k => k.status === 'mastered');
+        const unlearned = allKnowledge.filter(k => !k.learned);
+        this.setData({
+          isBatchCompleted: true,
+          isAllReviewed: false,
+          fullReviewList: latestBatch.map(k => k.id),
+          reviewList: [],
+          current: null,
+          currentIndex: -1,
+          remainingCount: todayList.length,
+          mastered,
+          unlearned
+        });
       } else {
-        this.setData({ isAllReviewed: true, isBatchCompleted: false, fullReviewList: [], reviewList: [], current: null, currentIndex: -1 });
+        this.setData({
+          isBatchCompleted: false,
+          isAllReviewed: true,
+          fullReviewList: [],
+          reviewList: [],
+          current: null,
+          currentIndex: -1,
+          remainingCount: 0,
+          mastered: [],
+          unlearned: []
+        });
+        // 新增：刷新 mastered 和 unlearned
+        const allKnowledge = storage.getGroupData(groupId) || [];
+        const mastered = allKnowledge.filter(k => k.status === 'mastered');
+        const unlearned = allKnowledge.filter(k => !k.learned);
+        this.setData({
+          isBatchCompleted: false,
+          isAllReviewed: true,
+          fullReviewList: [],
+          reviewList: [],
+          current: null,
+          currentIndex: -1,
+          remainingCount: 0,
+          mastered,
+          unlearned
+        });
       }
     }
   },
 
   prevOne() {
+    if (this.timerId) {
+      clearTimeout(this.timerId);
+      this.timerId = null;
+    }
+
     const { currentIndex, reviewList } = this.data;
     if (currentIndex <= 0) return;
 
@@ -207,7 +339,6 @@ Page({
 
   toMastered() {
     const { groupId } = this.data
-    console.log("review to master选择group=", groupId);
     if (!groupId) {
       wx.showToast({ title: '分组ID缺失', icon: 'none' })
       return
@@ -244,6 +375,10 @@ Page({
       content: '确定要彻底删除该知识点吗？此操作不可撤销。',
       success: async (res) => {
         if (res.confirm) {
+          if (this.timerId) {
+            clearTimeout(this.timerId);
+            this.timerId = null;
+          }
           const storage = require('../../utils/storage');
           await storage.removeKnowledge(groupId, current.id);
       const app = getApp();
@@ -271,44 +406,91 @@ Page({
     });
   },
 
-  onTouchStart(e) {
-    this.touchStartX = e.touches[0].clientX;
-    this.touchStartY = e.touches[0].clientY;
-    this.touchDeltaX = 0;
-    this.touchDeltaY = 0;
+  // 题目区：只处理上下滑
+  onQuestionTouchStart(e) {
+    this.qTouchStartY = e.touches[0].clientY;
+    this.qTouchDeltaY = 0;
   },
-
-  onTouchMove(e) {
-    const moveX = e.touches[0].clientX;
-    const moveY = e.touches[0].clientY;
-    this.touchDeltaX = moveX - this.touchStartX;
-    this.touchDeltaY = moveY - this.touchStartY;
-    // 可选：可在此处做视觉反馈
+  onQuestionTouchMove(e) {
+    this.qTouchDeltaY = e.touches[0].clientY - this.qTouchStartY;
+    // 新增：上下滑动提示
+    const threshold = 30;
+    const clientX = e.touches[0].clientX;
+    const clientY = e.touches[0].clientY;
+    if (this.qTouchDeltaY <= -threshold) {
+      updateQSwipeHint.call(this, '上滑表示没记住', clientX, clientY);
+    } else if (this.qTouchDeltaY >= threshold) {
+      updateQSwipeHint.call(this, '下滑表示记住了', clientX, clientY);
+    } else {
+      updateQSwipeHint.call(this, '', clientX, clientY);
+    }
   },
-
-  onTouchEnd(e) {
-    const thresholdX = 60; // 横向滑动阈值(px)
-    const thresholdY = 60; // 纵向滑动阈值(px)
-    // 优先判断纵向滑动
-    if (this.touchDeltaY >= thresholdY) {
-      // 下滑，记住了
+  onQuestionTouchEnd(e) {
+    const thresholdY = 60;
+    const question = this.data.current?.question || '';
+    if (this.qTouchDeltaY >= thresholdY) {      
       this.markResult({ currentTarget: { dataset: { result: 'remember' } } });
-    } else if (this.touchDeltaY <= -thresholdY) {
-      // 上滑，没记住
+    } else if (this.qTouchDeltaY <= -thresholdY) {
       this.markResult({ currentTarget: { dataset: { result: 'forget' } } });
-    } else if (this.touchDeltaX <= -thresholdX) {
-      // 左滑，下一题
+    }
+    this.qTouchStartY = 0;
+    this.qTouchDeltaY = 0;
+    if (qSwipeHintThrottleTimer) {
+      clearTimeout(qSwipeHintThrottleTimer);
+      qSwipeHintThrottleTimer = null;
+    }
+    this.setData({
+      qSwipeHint: '',
+      qSwipeHintX: null,
+      qSwipeHintY: null
+    });
+    lastQSwipeHint = '';
+    lastQSwipeHintX = null;
+    lastQSwipeHintY = null;
+  },
+
+  // 答案区：只处理左右滑
+  onAnswerTouchStart(e) {
+    this.aTouchStartX = e.touches[0].clientX;
+    this.aTouchDeltaX = 0;
+  },
+  onAnswerTouchMove(e) {
+    this.aTouchDeltaX = e.touches[0].clientX - this.aTouchStartX;
+    // 新增：左右滑动提示
+    const threshold = 30;
+    const clientX = e.touches[0].clientX;
+    const clientY = e.touches[0].clientY;
+    if (this.aTouchDeltaX <= -threshold) {
+      updateASwipeHint.call(this, '左滑表示切换下一个', clientX, clientY);
+    } else if (this.aTouchDeltaX >= threshold) {
+      updateASwipeHint.call(this, '右滑表示切换上一个', clientX, clientY);
+    } else {
+      updateASwipeHint.call(this, '', clientX, clientY);
+    }
+  },
+  onAnswerTouchEnd(e) {
+    const thresholdX = 60;
+    if (this.aTouchDeltaX <= -thresholdX) {
       this.nextOne();
-    } else if (this.touchDeltaX >= thresholdX) {
-      // 右滑，上一题
+    } else if (this.aTouchDeltaX >= thresholdX) {
       this.prevOne();
     }
-    // 重置
-    this.touchStartX = 0;
-    this.touchStartY = 0;
-    this.touchDeltaX = 0;
-    this.touchDeltaY = 0;
+    this.aTouchStartX = 0;
+    this.aTouchDeltaX = 0;
+    if (aSwipeHintThrottleTimer) {
+      clearTimeout(aSwipeHintThrottleTimer);
+      aSwipeHintThrottleTimer = null;
+    }
+    this.setData({
+      aSwipeHint: '',
+      aSwipeHintX: null,
+      aSwipeHintY: null
+    });
+    lastASwipeHint = '';
+    lastASwipeHintX = null;
+    lastASwipeHintY = null;
   },
+
   /**
    * 计算知识点最后记忆时间描述
    */

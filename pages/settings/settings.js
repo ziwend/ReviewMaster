@@ -2,7 +2,9 @@ const storage = require('../../utils/storage');
 
 Page({
   data: {
-    settings: {}
+    settings: {},
+    groups: [],
+    groupEfactorMap: {}
   },
 
   onLoad: function (options) {
@@ -11,8 +13,12 @@ Page({
 
   loadSettings() {
     const settings = storage.getSettings();
+    const groups = storage.getAllGroups();
+    const groupEfactorMap = { ...(settings.groupEfactorMap || {}) };
     this.setData({
-      settings: settings
+      settings: settings,
+      groups: groups,
+      groupEfactorMap: groupEfactorMap
     });
   },
 
@@ -42,8 +48,24 @@ Page({
     });
   },
 
+  handleGroupEfactorInput(e) {
+    const groupId = e.currentTarget.dataset.groupid;
+    let value = e.detail.value;
+    if (value === '') return;
+    value = Number(value);
+    if (value < 1.3 || value > 3.0) {
+      wx.showToast({ title: 'efactor建议范围1.3-3.0', icon: 'none' });
+      return;
+    }
+    this.setData({
+      [`groupEfactorMap.${groupId}`]: value
+    });
+  },
+
   handleSave() {
-    storage.saveSettings(this.data.settings);
+    const settings = this.data.settings;
+    settings.groupEfactorMap = { ...this.data.groupEfactorMap };
+    storage.saveSettings(settings);
     wx.showToast({
       title: '保存成功',
       icon: 'success'
@@ -57,7 +79,8 @@ Page({
     const defaultSettings = storage.getDefaultSettings();
     storage.saveSettings(defaultSettings);
     this.setData({
-      settings: defaultSettings
+      settings: defaultSettings,
+      groupEfactorMap: { ...(defaultSettings.groupEfactorMap || {}) }
     });
     wx.showToast({
       title: '已恢复默认设置',

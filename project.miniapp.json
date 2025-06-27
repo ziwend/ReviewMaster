@@ -1,6 +1,6 @@
 {
   "miniVersion": "v2",
-  "name": "%name%",
+  "name": "ReviewMaster",
   "version": "0.0.1",
   "versionCode": 100,
   "i18nFilePath": "i18n",
@@ -16,9 +16,9 @@
       "xweb": false
     },
     "icons": {
-      "hdpi": "",
-      "xhdpi": "",
-      "xxhdpi": "",
+      "hdpi": "d:/Downloads/logo.png",
+      "xhdpi": "d:/Downloads/logo.png",
+      "xxhdpi": "d:/Downloads/logo.png",
       "xxxhdpi": ""
     },
     "splashscreen": {

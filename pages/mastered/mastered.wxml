@@ -8,7 +8,7 @@
   <block wx:if="{{masteredList.length > 0}}">
     <view class="mastered-list">
       <view class="card mastered-card" wx:for="{{masteredList}}" wx:key="id">
-        <view class="card-content">
+        <view class="card-content" bindtap="showHistory" data-id="{{item.id}}">
           <view class="question-text">{{item.question}}</view>
         </view>
         <view class="card-actions">

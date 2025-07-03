@@ -9,21 +9,6 @@
   </view>
 
   <view class="setting-group">
-    <view class="setting-group-title">自动跳转延时（秒）</view>
-    <view class="setting-item">
-      <view class="setting-label">"记住了/模糊"后</view>
-      <input class="setting-input" type="number" value="{{settings.delayRemember}}" data-key="delayRemember" bindinput="handleInputChange" />
-    </view>
-    <view class="setting-desc">回答正确后，自动跳转到下一题的等待时间（建议 1-300）。</view>
-
-    <view class="setting-item">
-      <view class="setting-label">"没记住"后</view>
-      <input class="setting-input" type="number" value="{{settings.delayForget}}" data-key="delayForget" bindinput="handleInputChange" />
-    </view>
-    <view class="setting-desc">回答错误后，自动跳转到下一题的等待时间（建议 1-300）。</view>
-  </view>
-
-  <view class="setting-group">
     <view class="setting-group-title">全局默认efactor</view>
     <view class="setting-item">
       <view class="setting-label">efactor</view>

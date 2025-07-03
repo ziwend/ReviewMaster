@@ -1,0 +1,84 @@
+ec-canvas {
+  width: 100%;
+  height: 400rpx;
+  min-height: 300rpx;
+  background: #fff;
+  display: block;
+}
+
+.history-container {
+  padding: 24rpx;
+  background: #fff;
+  min-height: 100vh;
+}
+
+.legend {
+  display: flex;
+  flex-direction: row;
+  margin: 16rpx 0 32rpx 0;
+}
+.legend-item {
+  margin-right: 32rpx;
+  font-size: 28rpx;
+}
+.efactor { color: #007aff; }
+.score { color: #ff9900; }
+.gap { color: #00b26a; }
+
+.btn-back {
+  margin-top: 40rpx;
+  width: 80vw;
+  background: #007aff;
+  color: #fff;
+  border-radius: 12rpx;
+  font-size: 32rpx;
+  padding: 16rpx 0;
+}
+
+.chart-divider {
+  height: 2rpx;
+  background: #eee;
+  margin: 24rpx 0 16rpx 0;
+}
+
+.history-list {
+  margin-top: 24rpx;
+}
+.history-item {
+  background: #f8f9fa;
+  border-radius: 12rpx;
+  margin-bottom: 18rpx;
+  padding: 18rpx 16rpx;
+  box-shadow: 0 2rpx 8rpx #eee;
+}
+.history-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 6rpx;
+  flex-wrap: wrap;
+}
+.history-label {
+  color: #888;
+  font-size: 26rpx;
+}
+.history-time {
+  color: #333;
+  margin-left: 8rpx;
+}
+.history-score {
+  color: #ff9900;
+  margin: 0 8rpx;
+}
+.history-interval {
+  color: #007aff;
+  margin: 0 8rpx;
+}
+.history-realgap {
+  color: #00b26a;
+  margin-left: 8rpx;
+}
+.history-efactor {
+  color: #007aff;
+  margin-left: 8rpx;
+} 

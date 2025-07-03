@@ -2,7 +2,7 @@
 const storage = require('../../utils/storage.js');
 
 // 分组知识点数量内存缓存
-let groupKnowledgeCountMap = {};
+// let groupKnowledgeCountMap = {}; // 已废弃，无需手动缓存
 
 Page({
   data: {
@@ -12,22 +12,19 @@ Page({
   },
 
   onLoad: function () {
-    this.loadGroups();
+    // this.loadGroups();
   },
 
   onShow: function () {
-    storage.refreshAllReviewLists();
     this.loadGroups();
   },
 
   loadGroups: function () {
-    this.setData({ loading: true });
     // 只加载分组基本信息和统计字段
     const groups = getApp().globalData.groups.map(g => ({
       id: g.id,
       name: g.name,
       knowledgeCount: g.knowledgeCount,
-      dueCount: g.dueCount || 0,
       unmasteredCount: g.unmasteredCount || 0,
       learnedCount: g.learnedCount || 0
     }));
@@ -35,24 +32,28 @@ Page({
       groups,
       newGroupName: '',
       loading: false
+    }, () => {
+      // dueCount可能有变
+      this.updateGroupStats();
     });
   },
 
   updateGroupStats: function () {
-    this.data.groups.forEach((group, index) => {
-      // 只读缓存，不再刷新今日批次
-      const todayList = storage.getTodayReviewList(group.id);
-      // 统计已学会/未掌握数量（未掌握基于已学会）
-      const allKnowledge = storage.getGroupData(group.id) || [];
-      const learnedList = allKnowledge.filter(k => k.learned === true);
-      const learnedCount = learnedList.length;
-      const unmasteredCount = learnedList.filter(k => k.status !== 'mastered').length;
-      this.setData({
-        [`groups[${index}].dueCount`]: todayList.length,
-        [`groups[${index}].unmasteredCount`]: unmasteredCount,
-        [`groups[${index}].learnedCount`]: learnedCount
-      });
+    storage.refreshAllReviewLists();
+
+    // 只更新dueCount字段
+    const dueCountMap = {};
+    getApp().globalData.groups.forEach(g => {
+      dueCountMap[g.id] = g.dueCount || 0;
     });
+
+    // 更新this.data.groups中的dueCount
+    const groups = this.data.groups.map(g => ({
+      ...g,
+      dueCount: dueCountMap[g.id] || 0
+    }));
+
+    this.setData({ groups });
   },
 
   handleGroupNameInput: function(e) {
@@ -69,12 +70,16 @@ Page({
       });
       return;
     }
-    const newGroup = storage.addGroup(this.data.newGroupName);
-    groupKnowledgeCountMap[newGroup.id] = 0; // 新增分组，缓存初始化为0
-    // this.loadGroups();
-    wx.navigateTo({
-      url: `/pages/import/import?groupId=${newGroup.id}`
-    });
+    try {
+      const newGroup = storage.addGroup(this.data.newGroupName);
+
+      wx.navigateTo({
+        url: `/pages/import/import?groupId=${newGroup.id}`
+      });
+    } catch (e) {
+      wx.showToast({ title: '存储空间不足，请清理部分分组或知识点', icon: 'none' });
+      console.error('addGroup writeFile err', e);
+    }
   },
 
   removeGroup: function (e) {
@@ -84,9 +89,13 @@ Page({
       content: `确定要删除分组 "${name}" 及其所有知识点吗？此操作不可撤销。`,
       success: (res) => {
         if (res.confirm) {
-          storage.removeGroup(id);
-          delete groupKnowledgeCountMap[id]; // 删除缓存
-          this.loadGroups();
+          try {
+            storage.removeGroup(id);
+            this.loadGroups();
+          } catch (e) {
+            wx.showToast({ title: '存储空间不足，请清理部分分组或知识点', icon: 'none' });
+            console.error('removeGroup writeFile err', e);
+          }
         }
       }
     });
@@ -94,10 +103,20 @@ Page({
 
   toReviewPage: function (e) {
     const { id } = e.currentTarget.dataset;
-
-    wx.navigateTo({
-      url: `/pages/review/review?groupId=${id}`
-    });
+    const group = getApp().globalData.groups.find(g => g.id == id);
+    if (group && group.knowledgeCount === 0) {
+      wx.navigateTo({
+        url: `/pages/import/import?groupId=${id}`
+      });
+    } else if (group && group.dueCount === 0) {
+      wx.navigateTo({
+        url: `/pages/learn/learn?groupId=${id}`
+      });
+    } else {
+      wx.navigateTo({
+        url: `/pages/review/review?groupId=${id}`
+      });
+    }
   },
 
   onRenameConfirm() {

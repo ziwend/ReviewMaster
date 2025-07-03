@@ -5,6 +5,7 @@
         "pages/learn/learn",
         "pages/review/review",
         "pages/mastered/mastered",
+        "pages/history/history",
         "pages/settings/settings",
         "pages/index/index"
     ],

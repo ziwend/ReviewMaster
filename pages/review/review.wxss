@@ -1,230 +1,288 @@
 /* pages/review/review.wxss */
 .review-container {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+.review-card-area {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 20rpx;
 }
 
 .review-card {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 20rpx;
-  min-height: 60vh; /* 确保卡片有足够高度 */
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 20rpx;
+    justify-content: flex-start;
+    align-items: stretch;
+    background: #fff;
+    border-radius: 24rpx;
+    /* 增强立体阴影效果 */
+    box-shadow: 0 12rpx 36rpx rgba(0, 0, 0, 0.16), 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
+    position: relative;
+    transition: box-shadow 0.2s;
+    z-index: 2;
+}
+
+.review-card.card {
+    will-change: transform;
+}
+
+.review-card+.review-card {
+    margin-top: -60rpx;
+}
+
+/* 预渲染下一张卡片样式 */
+.review-card[style*='scale'] {
+    box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+    opacity: 0.85;
+}
+
+.review-card-stack {
+    min-height: 0;
+    height: auto;
+    box-sizing: border-box;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    width: 100%;
+    /* 保证所有卡片尺寸一致 */
+}
+
+.review-card-stack+.review-card-stack {
+    /* 取消margin，避免卡片堆叠时高度异常 */
+    margin-top: 0;
+}
+
+.review-card.card {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 状态栏优化 */
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 28rpx;
+    color: #444;
+    margin-left: 20rpx;
+    margin-bottom: 20rpx;
+    z-index: 10;
+    position: relative;
+    background: transparent;
 }
 
 /* 合并问题文本样式 */
-.question-text, .only-question {
-  font-size: 48rpx;
-  font-weight: 500;
-  color: var(--text-color-primary);
-  line-height: 1.6;
-  white-space: pre-wrap;
-  width: 100%;
-  box-sizing: border-box;
+.question-text,
+.only-question {
+    font-size: 48rpx;
+    font-weight: 500;
+    color: var(--text-color-primary);
+    line-height: 1.6;
+    box-sizing: border-box;
 }
 
 .only-question {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  flex: 1; /* 充满剩余空间 */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    flex: 1;
+    /* 充满剩余空间 */
+    height: 100%;
 }
 
 .answer-section {
-  flex: 1;
-  min-height: 0;
-  margin-top: 10rpx;
-  opacity: 0;
-  overflow: hidden;
-  transition: opacity 0.4s ease-out;
-  display: flex;
-  flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
 }
 
 .answer-section.show {
-  opacity: 1;
+    opacity: 1;
 }
 
 .separator {
-  width: 80rpx;
-  height: 4rpx;
-  background-color: var(--separator-color);
-  margin: 0 auto 30rpx;
+    width: 80rpx;
+    height: 4rpx;
+    background-color: var(--separator-color);
+    margin: 0 auto 30rpx;
 }
 
 .answer-text {
-  font-size: 36rpx;
-  color: var(--primary-color);
-  line-height: 1.5;
-  white-space: pre-wrap;
-  flex: 1;
-  overflow: auto;
+    font-size: 36rpx;
+    color: var(--primary-color);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    margin-top: 12rpx;
+    margin-bottom: 20rpx;
 }
 
 .action-buttons {
-  display: flex;
-  gap: 24rpx;
-  padding: 0 24rpx;
-  margin-bottom: 20rpx;
-}
-
-.action-buttons:empty {
-  padding: 0;
-  margin-bottom: 0;
+    display: flex;
+    gap: 24rpx;
+    padding: 0 24rpx;
+    margin-bottom: 20rpx;
 }
 
 /* 精简按钮样式 */
 .btn-common {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 88rpx;
-  border-radius: 44rpx;
-  transition: opacity 0.2s;
-  flex: 1;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 88rpx;
+    border-radius: 44rpx;
+    transition: opacity 0.2s;
+    flex: 1;
 }
 
 .btn-common:active {
-  opacity: 0.8;
+    opacity: 0.8;
 }
 
 .btn-primary {
-  background-color: #007aff;
+    background-color: #007aff;
 }
 
 .btn-danger {
-  background-color: #fa5151;
+    background-color: #fa5151;
 }
 
 .btn-delete {
-  background-color: #888;
+    background-color: #888;
 }
 
 .btn-warning {
-  background-color: #ff9900;
+    background-color: #ff9900;
 }
 
 .btn-text {
-  color: #fff;
-  font-size: 32rpx;
-  font-weight: 500;
+    color: #fff;
+    font-size: 32rpx;
+    font-weight: 500;
 }
 
 /* 优化空状态样式 */
 .review-empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
 }
 
 .empty-icon {
-  width: 240rpx;
-  height: 240rpx;
+    width: 240rpx;
+    height: 240rpx;
 }
 
 /* 为空状态下的按钮添加特定样式 */
 .review-empty .btn-common {
-  flex: none; /* 取消flex拉伸 */
-  width: 320rpx;
-  margin-top: 60rpx;
+    flex: none;
+    /* 取消flex拉伸 */
+    width: 320rpx;
+    margin-top: 60rpx;
 }
 
-/* 状态栏优化 */
-.stat-bar {
-  background: #fafbfc;
-  border-radius: 16rpx;
-  padding: 24rpx 24rpx 12rpx;
-}
-
-.stat-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 28rpx;
-  color: #444;
-  margin-bottom: 8rpx;
-}
 
 .gesture-guide-mask {
-  position: absolute;
-  left: 0; top: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.45);
-  z-index: 99;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 99;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
 }
+
 .gesture-guide-content-vertical {
-  width: 100%;
-  height: 100%;
-  background: rgba(0,0,0,0.45);
-  border-radius: 0;
-  padding: 0;
-  text-align: center;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 48rpx;
-  justify-content: center;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.45);
+    border-radius: 0;
+    padding: 0;
+    text-align: center;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 48rpx;
+    justify-content: center;
 }
+
 .gesture-guide-title {
-  font-size: 36rpx;
-  color: #fff;
-  margin-bottom: 32rpx;
-  font-weight: bold;
+    font-size: 36rpx;
+    color: #fff;
+    margin-bottom: 32rpx;
+    font-weight: bold;
 }
+
 .gesture-guide-col-vertical {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 20rpx;
-  margin-top: 20rpx;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20rpx;
+    margin-top: 20rpx;
 }
+
 .swipe-icon {
-  width: 100rpx;
-  height: 100rpx;
-  margin-bottom: 16rpx;
+    width: 100rpx;
+    height: 100rpx;
+    margin-bottom: 16rpx;
 }
+
 .gesture-guide-desc {
-  color: #fff;
-  font-size: 28rpx;
-  text-align: center;
+    color: #fff;
+    font-size: 28rpx;
+    text-align: center;
 }
 
 .media-container {
-  margin-top: 24rpx;
-  display: flex;
-  flex-direction: column;
-  gap: 16rpx;
+    margin-top: 24rpx;
+    display: flex;
+    flex-direction: column;
+    gap: 16rpx;
 }
 
 .media-image {
-  width: 100%;
-  max-height: 400rpx;
-  border-radius: 16rpx;
-  background-color: #f0f0f0;
+    width: 100%;
+    max-height: 400rpx;
+    border-radius: 16rpx;
+    background-color: #f0f0f0;
 }
 
 .media-audio {
-  width: 100%;
+    width: 100%;
 }
 
 .swipe-hint-bar {
-  position: fixed;
-  background: rgba(0,0,0,0.7);
-  color: #fff;
-  padding: 18rpx 48rpx;
-  border-radius: 40rpx;
-  font-size: 32rpx;
-  z-index: 9999;
-  text-align: center;
-  box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.08);
-  pointer-events: none;
+    position: fixed;
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    padding: 18rpx 48rpx;
+    border-radius: 40rpx;
+    font-size: 32rpx;
+    z-index: 9999;
+    text-align: center;
+    box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.08);
+    pointer-events: none;
 }

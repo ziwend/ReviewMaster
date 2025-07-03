@@ -100,5 +100,13 @@ Page({
 
   toGroups() {
     wx.navigateTo({ url: '/pages/groups/groups' })
-  }
+  },
+
+  // 新增：点击知识点显示复习记录
+  showHistory(e) {
+    const { id } = e.currentTarget.dataset;
+    wx.navigateTo({
+      url: `/pages/history/history?id=${id}`
+    });
+  },
 })

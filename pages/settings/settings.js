@@ -38,10 +38,6 @@ Page({
         wx.showToast({ title: '批次大小需在1-100之间', icon: 'none' });
         return;
     }
-    if ((key === 'delayRemember' || key === 'delayForget') && (value < 1 || value > 300)) {
-        wx.showToast({ title: '延迟需在1-300秒之间', icon: 'none' });
-        return;
-    }
 
     this.setData({
       [`settings.${key}`]: value

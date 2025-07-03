@@ -1,128 +1,98 @@
+<!--pages/review.wxml-->
 <view class="container review-container">
-
-  <!-- 悬浮滑动提示：问题区 -->
-  <view wx:if="{{qSwipeHint}}" class="swipe-hint-bar" style="left:{{qSwipeHintX-30}}px;top:{{qSwipeHintY}}px;transform:translate(-100%,-50%);">{{qSwipeHint}}</view>
-  <!-- 悬浮滑动提示：答案区 -->
-  <view wx:if="{{aSwipeHint}}" class="swipe-hint-bar" style="left:{{aSwipeHintX-30}}px;top:{{aSwipeHintY}}px;transform:translate(-100%,-50%);">{{aSwipeHint}}</view>
-
-  <!-- 加载中状态 -->
-  <view wx:if="{{loading}}" class="loading">加载中...</view>
-
-  <!-- 复习卡片 -->
-  <block wx:elif="{{current}}">
-
-      <view class="stat-bar">
+    <!-- 悬浮滑动提示：问题区 -->
+    <view wx:if="{{qSwipeHint}}" class="swipe-hint-bar" style="left:{{qSwipeHintX}}px;top:{{qSwipeHintY}}px;transform:translate(-50%,-200%);">{{qSwipeHint}}</view>
+    <!-- 悬浮滑动提示：答案区 -->
+    <view wx:if="{{aSwipeHint}}" class="swipe-hint-bar" style="left:{{aSwipeHintX}}px;top:{{aSwipeHintY}}px;transform:translate(-50%,-200%);">{{aSwipeHint}}</view>
+    <!-- 复习卡片 -->
+    <block wx:if="{{current}}">
         <view class="stat-row">
-          <text>第{{currentIndex+1}}/{{reviewList.length}}题</text>
-          <block wx:if="{{current.lastRememberAgo}}">
-            <text class="last-remember-label">最后记住：{{current.lastRememberAgo}}</text>
-          </block>
+            <text>第{{currentBatchIndex}}/{{totalBatchCount}}批 第{{currentIndex+1}}/{{reviewList.length}}题</text>
+            <text>{{current.lastRememberAgo}}</text>
         </view>
-      </view>
 
-    <view class="review-card card">
-      <block wx:if="{{!showResult}}">
-        <view class="question-text only-question"
-              bindtouchstart="onQuestionTouchStart"
-              bindtouchmove="onQuestionTouchMove"
-              bindtouchend="onQuestionTouchEnd">
-          {{current.question}}
-          <block wx:if="{{showGestureGuide}}">
-            <view class="gesture-guide-mask"
-                  bindtouchstart="onGestureGuideTouchStart"
-                  bindtouchend="onGestureGuideTouchEnd">
-              <view class="gesture-guide-content-vertical">
+        <!-- 复习卡片 -->
+        <view class="review-card-area">
+            <!-- 下层卡片：只显示问题 -->
+            <view wx:if="{{reviewList.length > currentIndex+1}}" class="review-card card review-card-stack" style="position:absolute;left:0;right:0;top:0;z-index:1;pointer-events:none;">
+                <view class="question-text only-question">{{reviewList[currentIndex+1].question}}</view>
+            </view>
+            <!-- 主卡片：显示问题和答案 -->
+            <view class="review-card card review-card-stack" style="position:absolute;left:0;right:0;top:0;bottom:0;z-index:2;transform:translateX({{cardTranslateX}}rpx);transition:{{cardTransition}};">
+                <block wx:if="{{!showResult}}">
+                    <view class="question-text only-question" bindtouchstart="onQuestionTouchStart" bindtouchmove="onQuestionTouchMove" bindtouchend="onQuestionTouchEnd">
+                        {{current.question}}
+                    </view>
+                </block>
+                <block wx:elif="{{showResult}}">
+                    <view class="question-text">{{current.question}}</view>
+                    <view class="answer-section show" bindtouchstart="onAnswerTouchStart" bindtouchmove="onAnswerTouchMove" bindtouchend="onAnswerTouchEnd">
+                        <view class="separator"></view>
+                        <view class="answer-text">{{current.answer}}</view>
+
+                        <view class="media-container">
+                            <block wx:for="{{current.media}}" wx:key="url">
+                                <image wx:if="{{item.type === 'image'}}" src="{{item.url}}" mode="aspectFit" class="media-image" bindtap="previewImage" data-url="{{item.url}}" />
+                                <audio wx:if="{{item.type === 'audio'}}" src="{{item.url}}" controls class="media-audio" />
+                            </block>
+                        </view>
+                        <view class="action-buttons">
+                            <view class="btn-common btn-warning" bindtap="markResult" data-result="vague">
+                                <view class="btn-text">模糊</view>
+                            </view>
+                        </view>
+                    </view>
+                </block>
+            </view>
+        </view>
+    </block>
+    <block wx:elif="{{isAllReviewed}}">
+        <!-- 空状态 -->
+        <view class="empty-state review-empty">
+
+            <image class="empty-icon" src="/components/icons/completed.svg" mode="aspectFit"></image>
+            <view class="empty-state-text">本轮复习已完成！</view>
+            <view class="action-buttons">
+                <view wx:if="{{masteredCount > 0}}" class="btn-common btn-delete" bindtap="toMastered">
+                    <view class="btn-text">已掌握</view>
+                </view>
+            </view>
+
+            <view wx:if="{{unlearnedCount > 0}}" class="empty-state-text">还剩{{unlearnedCount}}个知识点未学习</view>
+            <view class="action-buttons">
+                <view wx:if="{{unlearnedCount > 0}}" class="btn-common btn-primary" bindtap="toLearnPage">
+                    <view class="btn-text">去学习</view>
+                </view>
+            </view>
+        </view>
+    </block>
+    <block wx:elif="{{isBatchCompleted}}">
+        <view class="empty-state learn-empty">
+            <!-- 批次完成 -->
+            <image class="empty-icon" src="/components/icons/completed.svg" mode="aspectFit"></image>
+            <view class="empty-state-text">太棒了！本批复习已完成！</view>
+            <view class="empty-state-secondary-text">还剩 {{remainingCount}} 个待复习</view>
+            <view class="action-buttons">
+                <view class="btn-common btn-primary" bindtap="loadNextBatch">
+                    <view class="btn-text">继续下一批</view>
+                </view>
+            </view>
+        </view>
+    </block>
+    <block wx:if="{{showGestureGuide}}">
+        <view class="gesture-guide-mask" bindtouchstart="onGestureGuideTouchStart" bindtouchend="onGestureGuideTouchEnd">
+            <view class="gesture-guide-content-vertical">
                 <view class="gesture-guide-title">滑动教学</view>
                 <view class="gesture-guide-col-vertical">
-                  <image class="swipe-icon" src="/components/icons/swipe_up.svg"/>
-                  <view class="gesture-guide-desc">上滑：没记住</view>
+                    <image class="swipe-icon" src="/components/icons/swipe_up.svg" />
+                    <view class="gesture-guide-desc">上滑：查看答案</view>
                 </view>
                 <view class="gesture-guide-col-vertical">
-                  <image class="swipe-icon" src="/components/icons/swipe_down.svg"/>
-                  <view class="gesture-guide-desc">下滑：记住了</view>
+                    <image class="swipe-icon" src="/components/icons/swipe_down.svg" />
+                    <view class="gesture-guide-desc">下滑：查看答案</view>
                 </view>
 
-              </view>
             </view>
-          </block>
         </view>
-      </block>
-      <block wx:elif="{{showResult}}">
-        <view class="question-text">{{current.question}}</view>
-        <view class="answer-section show"
-              bindtouchstart="onAnswerTouchStart"
-              bindtouchmove="onAnswerTouchMove"
-              bindtouchend="onAnswerTouchEnd">
-          <view class="separator"></view>
-          <view class="answer-text">{{current.answer}}</view>
-          <block wx:if="{{current.media && current.media.length}}">
-            <view class="media-container">
-              <block wx:for="{{current.media}}" wx:key="url">
-                <image wx:if="{{item.type === 'image'}}" src="{{item.url}}" mode="aspectFit" class="media-image" bindtap="previewImage" data-url="{{item.url}}"/>
-                <audio wx:if="{{item.type === 'audio'}}" src="{{item.url}}" controls class="media-audio"/>
-              </block>
-            </view>
-          </block>
-        </view>
-      </block>
-    </view>
-
-    <!-- 操作按钮 -->
-    <view class="action-buttons">
-      <block wx:if="{{!showResult}}">
-      <!-- 
-        <view class="btn-common btn-danger" bindtap="markResult" data-result="forget">
-          <view class="btn-text">没记住</view>
-        </view>
-         -->
-        <view class="btn-common btn-warning" bindtap="markResult" data-result="vague">
-          <view class="btn-text">模糊</view>
-        </view>
-        <!-- 
-        <view class="btn-common btn-primary" bindtap="markResult" data-result="remember">
-          <view class="btn-text">记住了</view>
-        </view>
-         -->
-      </block>
-      <block wx:else>
-
-          <block wx:if="{{showDeleteButton}}">
-            <view class="btn-common btn-delete" bindtap="deleteCurrentKnowledge">
-              <view class="btn-text">删除</view>
-            </view>
-          </block>
-
-      </block>
-    </view>
-  </block>
-
-  <!-- 空状态 -->
-  <view class="empty-state review-empty" wx:else>
-    <!-- 批次完成 -->
-    <block wx:if="{{isBatchCompleted}}">
-      <image class="empty-icon" src="/components/icons/completed.svg" mode="aspectFit"></image>
-      <view class="empty-state-text">太棒了！本批复习已完成！</view>
-      <view class="empty-state-secondary-text">还剩 {{remainingCount}} 个待复习</view>
-      <view class="btn-common btn-primary" bindtap="loadNextBatch">
-              <view class="btn-text">继续下一批</view>
-      </view>
-
     </block>
-    <!-- 全部完成 -->
-    <block wx:if="{{isAllReviewed}}">
-      <image class="empty-icon" src="/components/icons/completed.svg" mode="aspectFit"></image>
-      <view class="empty-state-text">本轮复习已完成！</view>
-      <block wx:if="{{mastered.length}}">
-        <view class="btn-common btn-delete" bindtap="toMastered">
-                <view class="btn-text">已掌握</view>
-        </view>
-      </block>
-      <block wx:if="{{unlearned.length}}">
-        <view class="btn-common btn-primary" bindtap="toLearnPage">
-                <view class="btn-text">去学习</view>
-        </view>
-      </block>
-    </block>
-  </view>
-
 </view>

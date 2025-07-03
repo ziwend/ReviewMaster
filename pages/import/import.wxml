@@ -16,7 +16,7 @@
     <textarea class="content-textarea"
               value="{{content}}"
               bindinput="bindContentInput"
-              placeholder="每行一个知识点，格式为：\n问题[Tab]答案\n或者\n问题|||答案"
+              placeholder='[{"question": "太阳的颜色是什么？", "answer": "黄色", "media": [{ "type": "image", "url": "https://example.com/sun.jpg" }]}]'
               maxlength="-1" />
   </view>
 

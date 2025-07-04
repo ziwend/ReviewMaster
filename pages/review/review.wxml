@@ -91,7 +91,6 @@
                     <image class="swipe-icon" src="/components/icons/swipe_down.svg" />
                     <view class="gesture-guide-desc">下滑：查看答案</view>
                 </view>
-
             </view>
         </view>
     </block>

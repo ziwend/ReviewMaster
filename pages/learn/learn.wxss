@@ -74,10 +74,12 @@
 .learn-card.swipe-left {
     border: 2px solid #4caf50;
     box-shadow: 0 0 16px 2px #4caf5066;
+    background: linear-gradient(90deg, #e8f5e9 60%, #4caf50cc 100%);
 }
 .learn-card.swipe-right {
     border: 2px solid #f44336;
     box-shadow: 0 0 16px 2px #f4433666;
+    background: linear-gradient(270deg, #ffebee 60%, #f44336ff 100%);
 }
 .stat-row {
     display: flex;
@@ -204,6 +206,7 @@
     background: rgba(0, 0, 0, 0.45);
     z-index: 99;
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
 }
@@ -235,7 +238,13 @@
     color: #fff;
     width: 45%;
 }
-
+.gesture-guide-col-vertical {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20rpx;
+    margin-top: 20rpx;
+}
 .media-container {
     margin-top: 24rpx;
     display: flex;

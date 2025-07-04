@@ -55,7 +55,7 @@ Page({
             gestureGuideActive: !hideGuide,
         }, () => {
             this.loadNextBatch();
-          });
+        });
     },
 
     onShow: function () {
@@ -111,7 +111,7 @@ Page({
 
     markLearned() {
         // 要先获取current，因为nextOne中会修改
-        const currentKnowledge = this.data.unlearnedList[this.data.currentIndex];        
+        const currentKnowledge = this.data.unlearnedList[this.data.currentIndex];
 
         // 异步保存，UI先行
         storage.saveKnowledge({
@@ -121,7 +121,7 @@ Page({
             repetition: 0,
             efactor: this.settings.efactor || 2.5,
             nextReviewTime: Date.now() + 5 * 60 * 1000,
-        });  
+        });
     },
 
     nextOne() {
@@ -147,13 +147,17 @@ Page({
         }
     },
     // 统一批次完成处理
-    handleBatchCompleted() {        
+    handleBatchCompleted() {
         this.setData({
             dueCount: storage.getDueCount(this.data.groupId),
             isAllLearned: this.data.unlearnedCount - 1 === 0,
             isBatchCompleted: true,
             current: null,
             unlearnedList: [],
+            cardTranslateX: 0,
+            cardTransition: 'transform 0.2s',
+            cardClass: '',
+            cardRotate: 0
         });
     },
 
@@ -181,22 +185,25 @@ Page({
         let cardClass = '';
         let hint = '';
         let rotate = 0;
+        let cardTranslateX = 0;
         if (this.touchDeltaX <= -threshold) {
             cardClass = 'swipe-left';
             hint = '左滑表示已学会';
             rotate = -5;
+            cardTranslateX = this.touchDeltaX;
         } else if (this.touchDeltaX >= threshold) {
             cardClass = 'swipe-right';
             hint = '右滑表示稍后学';
             rotate = 5;
+            cardTranslateX = this.touchDeltaX;
         }
         // 卡片跟随手指移动
-      this.setData({
-        cardTranslateX: this.touchDeltaX,
-        cardTransition: '',
-        cardClass: cardClass,
-        cardRotate: rotate
-      });
+        this.setData({
+            cardTranslateX: cardTranslateX,
+            cardTransition: '',
+            cardClass: cardClass,
+            cardRotate: rotate
+        });
         aSwipeHandler.updateHint.call(this, hint, clientX, clientY);
     },
 
@@ -223,8 +230,8 @@ Page({
             }, () => {
                 setTimeout(() => {
                     if (direction === -1) this.markLearned();
-                    else if (direction === 1) console.log("learn swipe to right");                    
-                    this.nextOne();                    
+                    else if (direction === 1) console.log("learn swipe to right");
+                    this.nextOne();
                 }, 300);
             });
 
@@ -299,6 +306,7 @@ Page({
                 success: (res) => {
                     if (res.confirm) {
                         this.markLearned();
+                        this.nextOne();
                     }
                 }
             });

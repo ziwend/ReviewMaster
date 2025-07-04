@@ -144,8 +144,14 @@ graph TD
 - 导入时自动分配唯一ID，支持多媒体字段。
 
 ### 分组统计与全局缓存
-- 分组统计字段（dueCount、learnedCount、unmasteredCount）由 `updateGroupStats` 自动维护。
 - 全局缓存（如 groupKnowledgeCountMap、groupStats）提升性能，所有页面只读这些统计字段。
+- 每个分组对象维护如下统计字段，所有页面只读这些字段，极大提升性能和一致性：
+  - `dueCount`：待复习知识点数量（即今日批次中 nextReviewTime <= now 的 learned 且未掌握知识点数）
+  - `learnedCount`：已学会知识点数量（learned === true）
+  - `unmasteredCount`：未掌握知识点数量（learned === true 且 status !== 'mastered'）
+- 统计字段仅在知识点变动时通过 `updateGroupStats` 自动更新，避免全量遍历。
+- 所有页面、定时器、复习流程均以 reviewList 为唯一数据源，保证各页面数据一致。
+- 定时器机制保证即使页面不重载，dueCount 也能自动刷新。
 
 ### 核心API接口说明
 - `getAllGroups()`：获取所有分组
@@ -209,6 +215,10 @@ graph TD
 > - 只有当某知识点连续5次记住（repetition≥5），且efactor≥2.5时，才会被标记为"已掌握"（mastered），不再进入常规复习队列。
 > - 该条件比单纯"复习次数达标"更严格，确保只有真正熟练且记忆强度高的知识点才会被判定为已掌握。
 
+
+### 算法来源
+<https://supermemo.guru/wiki/SuperMemo_Guru>
+
 ### 文件结构
 ```
 ├── app.js               # 小程序入口
@@ -269,7 +279,7 @@ graph TD
 ### 使用指南
 1. **创建分组**：在分组页面输入名称并添加
 2. **导入知识**：
-   - 文本输入：在输入框按`问题|||答案`格式输入
+   - 文本输入：在输入框按格式输入
    - 文件导入：选择JSON格式的知识点文件
 3. **开始复习**：
    - 进入分组点击"复习"
@@ -307,27 +317,7 @@ npm test
 ## 注意事项
 1. 所有数据存储在本地，卸载小程序将丢失数据
 
-
 ---
-
-> 本项目核心复习算法以SM-2为主，主逻辑以efactor、repetition等字段为准。
-
-### 分组统计与数据一致性
-
-- 每个分组对象维护如下统计字段，所有页面只读这些字段，极大提升性能和一致性：
-  - `dueCount`：待复习知识点数量（即今日批次中 nextReviewTime <= now 的 learned 且未掌握知识点数）
-  - `learnedCount`：已学会知识点数量（learned === true）
-  - `unmasteredCount`：未掌握知识点数量（learned === true 且 status !== 'mastered'）
-- 统计字段仅在知识点变动时通过 `updateGroupStats` 自动更新，避免全量遍历。
-- 所有页面、定时器、复习流程均以 reviewList 为唯一数据源，保证各页面数据一致。
-- 定时器机制保证即使页面不重载，dueCount 也能自动刷新。
-
-## 参考
-<https://supermemo.guru/wiki/SuperMemo_Guru>
-
-## 下一步计划
-引入FSRS（Free Spaced Repetition Scheduler）算法
-<https://github.com/open-spaced-repetition/fsrs4anki>
 
 ## 新增与优化说明（2024年6月）
 
@@ -347,8 +337,12 @@ npm test
 - **支持微信小程序或Android平台**，部分导入逻辑根据平台自动适配（如wx.miniapp.chooseFile、wx.chooseMessageFile等）。
 
 
-## 性能监控与缓存机制
+### 性能监控与缓存机制
 - 项目引入LRU缓存（分组100条、知识点500条），极大提升性能。
 - 支持性能日志开关（enablePerfLogging），可在设置中开启，开发调试时建议打开。
 - 性能日志包括缓存命中率、读写耗时、内存占用、存储配额等。
 
+
+## 下一步计划
+引入FSRS（Free Spaced Repetition Scheduler）算法
+<https://github.com/open-spaced-repetition/fsrs4anki>

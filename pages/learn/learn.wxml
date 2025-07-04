@@ -68,15 +68,13 @@
         <view class="gesture-guide-mask" bindtouchstart="onGestureGuideTouchStart" bindtouchend="onGestureGuideTouchEnd">
             <view class="gesture-guide-content">
                 <view class="gesture-guide-title">滑动教学</view>
-                <view class="gesture-guide-row">
-                    <view class="gesture-guide-col">
-                        <image class="swipe-icon" src="/components/icons/swipe_left.svg" />
-                        <view class="gesture-guide-desc">表示已学会该知识点</view>
-                    </view>
-                    <view class="gesture-guide-col">
-                        <image class="swipe-icon" src="/components/icons/swipe_right.svg" />
-                        <view class="gesture-guide-desc">表示将删除该知识点</view>
-                    </view>
+                <view class="gesture-guide-col-vertical">
+                    <image class="swipe-icon" src="/components/icons/swipe_left.svg" style="width:100rpx;height:100rpx;" />
+                    <view class="gesture-guide-desc">左滑表示已学会该知识点</view>
+                </view>
+                <view class="gesture-guide-col-vertical">
+                    <image class="swipe-icon" src="/components/icons/swipe_right.svg" style="width:100rpx;height:100rpx;"  />
+                    <view class="gesture-guide-desc">右滑表示稍后学习该知识点</view>
                 </view>
             </view>
         </view>

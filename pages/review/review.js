@@ -159,6 +159,11 @@ Page({
     const completedCount = page * pageSize > totalCount ? totalCount : page * pageSize;
     const remainingCount = totalCount - completedCount;
     this.setData({
+        cardTranslateX: 0,
+        cardTransition: '',
+        cardClass: '',
+        cardRotate: 0,
+        showResult: false,
       isBatchCompleted: true,
       current: null,
       reviewList: [],
@@ -207,7 +212,7 @@ Page({
     let { current, groupId } = this.data;
 
     // 首次复习时初始化算法字段
-    if (!current.learned) {
+    if (current && !current.learned) {
       current.learned = true;
       // 初始化SM-2算法字段
       if (typeof current.repetition === 'undefined') current.repetition = 0;
@@ -332,18 +337,21 @@ Page({
     let cardClass = '';
     let hint = '';
     let rotate = 0;
+    let cardTranslateX = 0;
     if (this.aTouchDeltaX <= -threshold) {
       cardClass = 'swipe-left';
       hint = '左滑表示已记住';
       rotate = -5;
+      cardTranslateX = this.aTouchDeltaX;
     } else if (this.aTouchDeltaX >= threshold) {
       cardClass = 'swipe-right';
       hint = '右滑表示没记住';
       rotate = 5;
+      cardTranslateX = this.aTouchDeltaX;
     }
     // 卡片跟随手指移动
     this.setData({
-      cardTranslateX: this.aTouchDeltaX,
+      cardTranslateX: cardTranslateX,
       cardTransition: '',
       cardClass: cardClass,
       cardRotate: rotate
@@ -432,7 +440,7 @@ Page({
       wx.showModal({
         title: '提示',
         content: '您向下滑动，表示记住了',
-        showCancel: false,
+        showCancel: true,
         success: (res) => {
           if (res.confirm) {
             this.markResult({ currentTarget: { dataset: { result: 'remember' } } });
@@ -447,7 +455,7 @@ Page({
       wx.showModal({
         title: '提示',
         content: '您向上滑动，表示没记住',
-        showCancel: false,
+        showCancel: true,
         success: (res) => {
           if (res.confirm) {
             this.markResult({ currentTarget: { dataset: { result: 'forget' } } });

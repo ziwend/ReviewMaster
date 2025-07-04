@@ -1,7 +1,7 @@
 {
   "miniVersion": "v2",
   "name": "ReviewMaster",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "versionCode": 100,
   "i18nFilePath": "i18n",
   "mini-android": {

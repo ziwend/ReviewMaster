@@ -108,14 +108,20 @@ Page({
       wx.navigateTo({
         url: `/pages/import/import?groupId=${id}`
       });
-    } else if (group && group.dueCount === 0) {
+    } else if (group && group.dueCount === 0 && group.learnedCount < group.knowledgeCount) {
       wx.navigateTo({
         url: `/pages/learn/learn?groupId=${id}`
       });
-    } else {
+    } else if (group && group.dueCount === 0 && group.learnedCount > group.unmasteredCount) {
       wx.navigateTo({
-        url: `/pages/review/review?groupId=${id}`
+        url: `/pages/mastered/mastered?groupId=${id}`
       });
+    } else if (group && group.dueCount > 0) {
+        wx.navigateTo({
+            url: `/pages/review/review?groupId=${id}`
+        });
+    } else {
+        wx.showToast({ title: '没有待复习，待学习，已掌握的知识点', icon: 'none' });
     }
   },
 

@@ -71,6 +71,14 @@
     flex-direction: column;
 }
 
+.learn-card.swipe-left {
+    border: 2px solid #4caf50;
+    box-shadow: 0 0 16px 2px #4caf5066;
+}
+.learn-card.swipe-right {
+    border: 2px solid #f44336;
+    box-shadow: 0 0 16px 2px #f4433666;
+}
 .stat-row {
     display: flex;
     justify-content: space-between;

@@ -17,7 +17,7 @@
                 </view>
             </view>
             <!-- 主卡片，z-index更高，滑动时覆盖下方卡片 -->
-            <view class="learn-card card learn-card-stack" bindtouchstart="onTouchStart" bindtouchmove="onTouchMove" bindtouchend="onTouchEnd" style="position:absolute;left:0;right:0;top:0;bottom:0;z-index:2;transform:translateX({{cardTranslateX||0}}rpx);transition:{{cardTransition}};">
+            <view class="learn-card card learn-card-stack {{cardClass}}" bindtouchstart="onTouchStart" bindtouchmove="onTouchMove" bindtouchend="onTouchEnd" style="position:absolute;left:0;right:0;top:0;bottom:0;z-index:2;transform:translateX({{cardTranslateX}}rpx) rotate({{cardRotate}}deg);transition:{{cardTransition}};">
                 <view class="question-text">{{current.question}}</view>
 
                 <view class="answer-section show">

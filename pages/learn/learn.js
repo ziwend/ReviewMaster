@@ -28,7 +28,9 @@ Page({
         hasMore: true, // 是否还有更多
         cardTranslateX: 0, // 新增：卡片横向位移
         cardTransition: '', // 新增：卡片过渡效果
-        learnedCount: 0 // 新增：已学会数量
+        learnedCount: 0, // 新增：已学会数量
+        cardClass: '', // 新增：卡片类名
+        rotate: 0
     },
 
     settings: {}, // 存储设置
@@ -51,14 +53,13 @@ Page({
             groupId,
             showGestureGuide: !hideGuide,
             gestureGuideActive: !hideGuide,
-        });
+        }, () => {
+            this.loadNextBatch();
+          });
     },
 
     onShow: function () {
-        // 页面返回时重新加载，确保数据同步
-        if (this.data.groupId) {
-            this.loadNextBatch();
-        }
+        console.log("learn on show");
     },
 
     loadNextBatch() {
@@ -110,8 +111,7 @@ Page({
 
     markLearned() {
         // 要先获取current，因为nextOne中会修改
-        const currentKnowledge = this.data.unlearnedList[this.data.currentIndex];
-        this.nextOne();
+        const currentKnowledge = this.data.unlearnedList[this.data.currentIndex];        
 
         // 异步保存，UI先行
         storage.saveKnowledge({
@@ -121,7 +121,7 @@ Page({
             repetition: 0,
             efactor: this.settings.efactor || 2.5,
             nextReviewTime: Date.now() + 5 * 60 * 1000,
-        });
+        });  
     },
 
     nextOne() {
@@ -137,7 +137,7 @@ Page({
                 current: unlearnedList[currentIndex + 1],
                 cardTranslateX: 0, // 重置卡片位置
                 cardTransition: '', // 清除过渡效果
-                learnedCount: this.data.learnedCount + 1
+                unlearnedCount: this.data.unlearnedCount - 1 //不管是删除，稍后学都减去一
             }, () => {
                 this.touchStartX = 0; // 重置触摸起始位置
                 this.touchDeltaX = 0; // 重置滑动距离
@@ -147,17 +147,14 @@ Page({
         }
     },
     // 统一批次完成处理
-    handleBatchCompleted() {
-        const unlearnedCount = storage.getUnlearnedCount(this.data.groupId);
+    handleBatchCompleted() {        
         this.setData({
-            unlearnedCount: unlearnedCount,
             dueCount: storage.getDueCount(this.data.groupId),
-            isAllLearned: unlearnedCount === 0,
+            isAllLearned: this.data.unlearnedCount - 1 === 0,
             isBatchCompleted: true,
             current: null,
             unlearnedList: [],
         });
-
     },
 
     previewImage(e) {
@@ -181,23 +178,25 @@ Page({
         const threshold = 60;
         const clientX = e.touches[0].clientX;
         const clientY = e.touches[0].clientY;
-
+        let cardClass = '';
         let hint = '';
+        let rotate = 0;
         if (this.touchDeltaX <= -threshold) {
-            // 卡片跟随手指移动
-            this.setData({
-                cardTranslateX: this.touchDeltaX,
-                cardTransition: ''
-            });
+            cardClass = 'swipe-left';
             hint = '左滑表示已学会';
+            rotate = -5;
         } else if (this.touchDeltaX >= threshold) {
-            // 卡片跟随手指移动
-            this.setData({
-                cardTranslateX: this.touchDeltaX,
-                cardTransition: ''
-            });
+            cardClass = 'swipe-right';
             hint = '右滑表示稍后学';
+            rotate = 5;
         }
+        // 卡片跟随手指移动
+      this.setData({
+        cardTranslateX: this.touchDeltaX,
+        cardTransition: '',
+        cardClass: cardClass,
+        cardRotate: rotate
+      });
         aSwipeHandler.updateHint.call(this, hint, clientX, clientY);
     },
 
@@ -218,14 +217,14 @@ Page({
             // 先执行动画再更新数据
             this.setData({
                 cardTranslateX: direction * 750,
-                cardTransition: 'transform 0.3s cubic-bezier(.4,2,.6,1)'
+                cardTransition: 'transform 0.3s cubic-bezier(.4,2,.6,1)',
+                cardClass: '',
+                cardRotate: 0
             }, () => {
                 setTimeout(() => {
                     if (direction === -1) this.markLearned();
-                    else if (direction === 1) this.nextOne();
-                    this.setData({
-                        cardTranslateX: 0
-                    }); // 重置位置要在数据更新之后
+                    else if (direction === 1) console.log("learn swipe to right");                    
+                    this.nextOne();                    
                 }, 300);
             });
 
@@ -235,7 +234,9 @@ Page({
         } else {
             this.setData({
                 cardTranslateX: 0,
-                cardTransition: 'transform 0.2s'
+                cardTransition: 'transform 0.2s',
+                cardClass: '',
+                cardRotate: 0
             });
         }
         aSwipeHandler.reset.call(this);
@@ -256,7 +257,8 @@ Page({
                 if (res.confirm) {
                     storage.removeKnowledge(groupId, current.id);
                     // 重新从 storage 加载数据，这是确保页面状态完全同步的最安全方法
-                    this.loadNextBatch();
+                    // this.loadNextBatch();
+                    this.nextOne(); // 删除一条后跳转下一条
                 }
             }
         });

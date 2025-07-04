@@ -18,7 +18,7 @@
                 <view class="question-text only-question">{{reviewList[currentIndex+1].question}}</view>
             </view>
             <!-- 主卡片：显示问题和答案 -->
-            <view class="review-card card review-card-stack" style="position:absolute;left:0;right:0;top:0;bottom:0;z-index:2;transform:translateX({{cardTranslateX}}rpx);transition:{{cardTransition}};">
+            <view class="review-card card review-card-stack {{cardClass}}" style="position:absolute;left:0;right:0;top:0;bottom:0;z-index:2;transform:translateX({{cardTranslateX}}rpx) rotate({{cardRotate}}deg);transition:{{cardTransition}};">
                 <block wx:if="{{!showResult}}">
                     <view class="question-text only-question" bindtouchstart="onQuestionTouchStart" bindtouchmove="onQuestionTouchMove" bindtouchend="onQuestionTouchEnd">
                         {{current.question}}
@@ -67,7 +67,7 @@
         </view>
     </block>
     <block wx:elif="{{isBatchCompleted}}">
-        <view class="empty-state learn-empty">
+        <view class="empty-state review-empty">
             <!-- 批次完成 -->
             <image class="empty-icon" src="/components/icons/completed.svg" mode="aspectFit"></image>
             <view class="empty-state-text">太棒了！本批复习已完成！</view>

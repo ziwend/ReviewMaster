@@ -63,6 +63,8 @@ Page({
     masteredCount: 0,
     unlearnedCount: 0,
     remainingCount: 0,
+    cardClass: '', // 新增：卡片类名
+    cardRotate: 0
   },
 
   settings: {}, // 存储设置
@@ -81,15 +83,14 @@ Page({
       groupId,
       showGestureGuide: !hideGuide,
       gestureGuideActive: !hideGuide,
+      page: 1
+    }, () => {
+      this.loadNextBatchCore();
     });
   },
 
   onShow: function () {
-    if (this.data.groupId) {
-      this.setData({ page: 1 }, () => {
-        this.loadNextBatchCore();
-      });
-    }
+    console.log("review on show");
   },
 
   loadNextBatch() {
@@ -185,15 +186,15 @@ Page({
       if (nextCurrent) {
         nextCurrent = { ...nextCurrent, lastRememberAgo: this.getLastRememberAgo(nextCurrent) };
       }
+      // 先清空所有卡片相关状态，再切换current，确保新卡片不会继承旧class
       this.setData({
-        currentIndex: currentIndex + 1,
-        current: nextCurrent,
         cardTranslateX: 0,
         cardTransition: '',
+        cardClass: '',
+        cardRotate: 0,
         showResult: false,
-      }, () => {
-        this.touchStartX = 0;
-        this.touchDeltaX = 0;
+        currentIndex: currentIndex + 1,
+        current: nextCurrent
       });
     } else {
       this.handleBatchCompleted();
@@ -231,18 +232,11 @@ Page({
     storage.saveKnowledge(current);
   },
 
-  // markResult 统一调用
-  async markResult(e) {
+
+  markResult(e) {
     const type = e.currentTarget.dataset.result;
     this.handleReviewFeedback(type);
     this.nextOne();
-  },
-
-  // markResultBySwipe 统一调用
-  markResultBySwipe(result) {
-    // result: true/false
-    const type = result ? 'remember' : 'forget';
-    this.handleReviewFeedback(type);
   },
 
   prevOne() {
@@ -262,7 +256,7 @@ Page({
     this.setData({
       currentIndex: newIndex,
       current,
-      showResult      
+      showResult
     });
   },
 
@@ -278,12 +272,12 @@ Page({
   /**
    * 页面隐藏时，清除定时器
    */
-  onHide: function () {},
+  onHide: function () { },
 
   /**
    * 页面卸载时，清除定时器
    */
-  onUnload: function () {},
+  onUnload: function () { },
 
 
   // 题目区：只处理上下滑
@@ -335,23 +329,25 @@ Page({
     const threshold = 60;
     const clientX = e.touches[0].clientX;
     const clientY = e.touches[0].clientY;
-
+    let cardClass = '';
     let hint = '';
+    let rotate = 0;
     if (this.aTouchDeltaX <= -threshold) {
-      // 卡片跟随手指移动
-      this.setData({
-        cardTranslateX: this.aTouchDeltaX,
-        cardTransition: ''
-      });
+      cardClass = 'swipe-left';
       hint = '左滑表示已记住';
+      rotate = -5;
     } else if (this.aTouchDeltaX >= threshold) {
-      // 卡片跟随手指移动
-      this.setData({
-        cardTranslateX: this.aTouchDeltaX,
-        cardTransition: ''
-      });
+      cardClass = 'swipe-right';
       hint = '右滑表示没记住';
+      rotate = 5;
     }
+    // 卡片跟随手指移动
+    this.setData({
+      cardTranslateX: this.aTouchDeltaX,
+      cardTransition: '',
+      cardClass: cardClass,
+      cardRotate: rotate
+    });
     aSwipeHandler.updateHint.call(this, hint, clientX, clientY);
   },
 
@@ -372,30 +368,31 @@ Page({
       // 先执行动画再更新数据
       this.setData({
         cardTranslateX: direction * 750,
-        cardTransition: 'transform 0.3s cubic-bezier(.4,2,.6,1)'
+        cardTransition: 'transform 0.3s cubic-bezier(.4,2,.6,1)',
+        cardClass: '',
+        cardRotate: 0
       }, () => {
         setTimeout(() => {
           if (direction === -1) {
-            this.markResult({ currentTarget: { dataset: { result: 'remember' } } });            
+            this.handleReviewFeedback('remember');
           } else if (direction === 1) {
-            this.markResult({ currentTarget: { dataset: { result: 'forget' } } });
+            this.handleReviewFeedback('forget');
           }
-          this.setData({
-            cardTranslateX: 0
-          }); // 重置位置要在数据更新之后
+          this.nextOne();
         }, 300);
       });
-
-      // 重置触摸状态
-      this.aTouchStartX = 0;
-      this.aTouchDeltaX = 0;
-    } else {
+    } else { // 没有达到滑动阈值自动复位
       this.setData({
         cardTranslateX: 0,
-        cardTransition: 'transform 0.2s'
+        cardTransition: 'transform 0.2s',
+        cardClass: '',
+        cardRotate: 0
       });
     }
     aSwipeHandler.reset.call(this);
+    // 重置触摸状态
+    this.aTouchStartX = 0;
+    this.aTouchDeltaX = 0;
   },
 
   /**
@@ -439,6 +436,7 @@ Page({
         success: (res) => {
           if (res.confirm) {
             this.markResult({ currentTarget: { dataset: { result: 'remember' } } });
+            this.nextOne();
           }
         }
       });
@@ -453,6 +451,7 @@ Page({
         success: (res) => {
           if (res.confirm) {
             this.markResult({ currentTarget: { dataset: { result: 'forget' } } });
+            this.nextOne();
           }
         }
       });

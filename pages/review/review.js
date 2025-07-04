@@ -300,14 +300,14 @@ Page({
     qSwipeHandler.updateHint.call(this, hint, clientX, clientY);
   },
   onQuestionTouchEnd(e) {
-    const thresholdY = 30;
-    if (this.qTouchDeltaY >= thresholdY) {
-      //
+    const threshold = 30;
+    if (this.qTouchDeltaY >= threshold) {
+      //下滑
       this.setData({
         showResult: true
       });
-    } else if (this.qTouchDeltaY <= -thresholdY) {
-      // 
+    } else if (this.qTouchDeltaY <= -threshold) {
+      // 上滑
       this.setData({
         showResult: true
       });
@@ -326,7 +326,7 @@ Page({
   onAnswerTouchMove(e) {
     this.aTouchDeltaX = e.touches[0].clientX - this.aTouchStartX;
     // 新增：滑动方向提示和位置
-    const threshold = 30;
+    const threshold = 60;
     const clientX = e.touches[0].clientX;
     const clientY = e.touches[0].clientY;
     let cardClass = '';

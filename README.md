@@ -14,45 +14,24 @@
 ### 📥 知识导入
 - 支持两种导入方式：
   1. **文本输入**：手动输入知识点
-  2. **JSON文件导入**：支持包含多媒体内容的数组对象格式。
+  2. **文件导入**：支持 csv/txt 文件，表头需包含 question,answer,audio,image 四列（audio/image 可选）。
 - **分批处理机制**：支持大数据量导入，避免界面卡顿
 - 进度显示：实时显示导入进度
 
-#### JSON 文件格式说明
+#### 文件导入格式说明
 
-**数组对象（支持多媒体）**
-，支持为每个知识点添加图片或音频。`media` 字段为可选，且**支持一个知识点同时包含多种媒体类型（如图片和音频）**，前端会全部展示。
+**表头示例（推荐）：**
 
-```json
-[
-  {
-    "question": "太阳的颜色是什么？",
-    "answer": "黄色",
-    "media": [
-      { "type": "image", "url": "https://example.com/sun.jpg" }
-    ]
-  },
-  {
-    "question": "请听音频，回答内容",
-    "answer": "音频内容",
-    "media": [
-      { "type": "audio", "url": "https://example.com/audio.mp3" }
-    ]
-  },
-  {
-    "question": "图文音频混合题",
-    "answer": "请看图片并听音频回答",
-    "media": [
-      { "type": "image", "url": "https://example.com/pic.jpg" },
-      { "type": "audio", "url": "https://example.com/audio2.mp3" }
-    ]
-  },
-  {
-    "question": "没有媒体的问题",
-    "answer": "没有媒体的答案"
-  }
-]
 ```
+question,answer,audio,image
+苹果的英文是什么,apple,https://example.com/audio/apple.mp3,https://example.com/image/apple.jpg
+香蕉的英文是什么,banana,https://example.com/audio/banana.mp3,
+请写出“太阳”的英文,sun,,https://example.com/image/sun.png
+中国的首都是哪里,Beijing,,
+```
+- 支持带表头（如 question,answer,audio,image），会自动跳过首行。
+- audio/image 字段可用 | 分隔多个链接。
+- 只需填写实际有内容的列，未填写可留空。
 
 > **前端支持说明：**
 > - 图片可点击预览，音频可直接播放。
@@ -166,8 +145,6 @@ graph TD
 - `getTodayReviewList(groupId)`：获取今日复习批次
 - `refreshAllReviewLists()`：刷新所有分组的今日复习批次（页面onLoad时调用）
 - `updateKnowledgeBySM2(knowledge, quality)`：按SM-2算法更新知识点状态
-- `getUnlearnedBatch(groupId, batchSize)`：获取未学会知识点一批
-- `getUnlearnedCount(groupId)`：获取未学会知识点总数
 - `refreshAllReviewListsAsync()`：异步刷新所有分组的今日复习批次，适合大数据量场景。
 - `processInChunks(items, processFn, chunkSize)`：通用分块处理函数，批量导入等场景使用。
 - `reportPerf()`：输出性能监控日志，便于开发调优。
@@ -182,7 +159,7 @@ graph TD
     E --> F{用户选择记得/模糊/没记住}
     F -->|记得/模糊| G[更新复习次数和间隔]
     F -->|没记住| H[重置复习状态]
-    G --> I{repetition≥5 且 efactor≥2.5?}
+    G --> I{repetition>5 且 efactor≥2.5?}
     I -->|是| J[标记为已掌握]
     I -->|否| K[计算下次复习时间]
     H --> K
@@ -280,7 +257,7 @@ graph TD
 1. **创建分组**：在分组页面输入名称并添加
 2. **导入知识**：
    - 文本输入：在输入框按格式输入
-   - 文件导入：选择JSON格式的知识点文件
+   - 文件导入：选择CSV/TXT格式的知识点文件
 3. **开始复习**：
    - 进入分组点击"复习"
    - 根据记忆情况选择"记住了"、"模糊"或"没记住"

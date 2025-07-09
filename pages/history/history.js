@@ -26,17 +26,37 @@ Page({
     }
   },
   async loadHistory(id) {
-    // 遍历所有分组，找到该知识点
-    const groups = storage.getAllGroups();
-    let knowledge = null;
-    for (const g of groups) {
-      const list = storage.getGroupData(g.id) || [];
-      const found = list.find(k => k.id === id);
-      if (found) {
-        knowledge = found;
-        break;
-      }
+    // 辅助格式化函数
+    function formatTime(ts) {
+      if (!ts) return '';
+      return new Date(ts).toLocaleString();
     }
+    function formatInterval(interval) {
+      if (interval < 1 / 24) return `${Math.round(interval * 24 * 60)}分钟`;
+      if (interval < 1) return `${Math.round(interval * 24)}小时`;
+      return `${interval}天`;
+    }
+    function formatRealGap(idx, time, arr, addTime) {
+      let realGap = '';
+      if (idx === 0 && addTime) {
+        const gapMs = time - addTime;
+        if (gapMs < 3600 * 1000) realGap = `（上次：${Math.round(gapMs / 60000)}分钟前）`;
+        else if (gapMs < 24 * 3600 * 1000) realGap = `（上次：${Math.round(gapMs / 3600000)}小时前）`;
+        else realGap = `（上次：${Math.round(gapMs / 86400000)}天前）`;
+        console.log("arr", JSON.stringify(arr, null, 2), addTime);
+      } else if (idx > 0) {
+        const gapMs = time - arr[idx - 1].time;
+        if (gapMs < 3600 * 1000) realGap = `（上次：${Math.round(gapMs / 60000)}分钟前）`;
+        else if (gapMs < 24 * 3600 * 1000) realGap = `（上次：${Math.round(gapMs / 3600000)}小时前）`;
+        else realGap = `（上次：${Math.round(gapMs / 86400000)}天前）`;
+      }
+      return realGap;
+    }
+    function formatEfactor(efactor) {
+      return typeof efactor === 'number' ? efactor.toFixed(2) : efactor;
+    }
+
+    let knowledge = storage.getKnowledgeByIdCached(id);
     if (!knowledge || !knowledge.history || knowledge.history.length === 0) {
       wx.showToast({ title: '无复习记录', icon: 'none' });
       return;
@@ -46,47 +66,15 @@ Page({
     const pageSize = this.data.historyPageSize || 50;
     const total = knowledge.history.length;
     const hasMore = (page * pageSize) < total;
-    const pageHistory = knowledge.history.slice((page-1)*pageSize, page*pageSize);
-    const history = pageHistory.map((h, idx, arr) => {
-      const date = new Date(h.time).toLocaleString();
-      let intervalStr = '';
-      if (h.interval < 1/24) {
-        intervalStr = `${Math.round(h.interval * 24 * 60)}分钟`;
-      } else if (h.interval < 1) {
-        intervalStr = `${Math.round(h.interval * 24)}小时`;
-      } else {
-        intervalStr = `${h.interval}天`;
-      }
-      let realGap = '';
-      if (idx === 0 && knowledge.addTime) {
-        const gapMs = h.time - knowledge.addTime;
-        if (gapMs < 3600*1000) {
-          realGap = `（实际：${Math.round(gapMs/60000)}分钟）`;
-        } else if (gapMs < 24*3600*1000) {
-          realGap = `（实际：${Math.round(gapMs/3600000)}小时）`;
-        } else {
-          realGap = `（实际：${Math.round(gapMs/86400000)}天）`;
-        }
-      } else if (idx > 0) {
-        const gapMs = h.time - arr[idx-1].time;
-        if (gapMs < 3600*1000) {
-          realGap = `（实际：${Math.round(gapMs/60000)}分钟）`;
-        } else if (gapMs < 24*3600*1000) {
-          realGap = `（实际：${Math.round(gapMs/3600000)}小时）`;
-        } else {
-          realGap = `（实际：${Math.round(gapMs/86400000)}天）`;
-        }
-      }
-      const efactorStr = typeof h.efactor === 'number' ? h.efactor.toFixed(2) : h.efactor;
-      return {
-        ...h,
-        displayTime: date,
-        displayScore: h.quality,
-        displayInterval: intervalStr,
-        displayRealGap: realGap,
-        displayEfactor: efactorStr
-      };
-    });
+    const pageHistory = knowledge.history.slice((page - 1) * pageSize, page * pageSize);
+    const history = pageHistory.map((h, idx, arr) => ({
+      ...h,
+      displayTime: formatTime(h.time),
+      displayScore: h.quality,
+      displayInterval: formatInterval(h.interval),
+      displayRealGap: formatRealGap(idx, h.time, arr, knowledge.addTime),
+      displayEfactor: formatEfactor(h.efactor)
+    }));
     this.setData({ history, addTime: knowledge.addTime, historyHasMore: hasMore }, () => {
       this.initChart({ ...knowledge, history: pageHistory });
     });
@@ -95,7 +83,7 @@ Page({
     if (!knowledge || !knowledge.history || !knowledge.history.length) return;
     this.selectComponent('#historyChart').init((canvas, width, height, dpr) => {
       const chart = echarts.init(canvas, null, { width, height, devicePixelRatio: dpr });
-      const xData = knowledge.history.map((h, idx) => `第${idx+1}次`);
+      const xData = knowledge.history.map((h, idx) => `第${idx + 1}次`);
       const efactorData = knowledge.history.map(h => Number(h.efactor && h.efactor.toFixed ? h.efactor.toFixed(2) : h.efactor));
       const scoreData = knowledge.history.map(h => h.quality);
       // 实际间隔
@@ -104,7 +92,7 @@ Page({
         if (idx === 0 && knowledge.addTime) {
           gap = (h.time - knowledge.addTime) / 60000; // 分钟
         } else if (idx > 0) {
-          gap = (h.time - arr[idx-1].time) / 60000; // 分钟
+          gap = (h.time - arr[idx - 1].time) / 60000; // 分钟
         }
         return Number(gap.toFixed(1));
       });
@@ -135,52 +123,6 @@ Page({
       const knowledge = { history: this.data.history, addTime: this.data.addTime };
       this.initChart(knowledge);
     }
-  },
-  // 新增：格式化时间
-  formatTime(ts) {
-    if (!ts) return '';
-    const date = new Date(ts);
-    return date.toLocaleString();
-  },
-  // 新增：格式化计划间隔
-  formatInterval(interval) {
-    if (interval < 1/24) {
-      return `${Math.round(interval * 24 * 60)}分钟`;
-    } else if (interval < 1) {
-      return `${Math.round(interval * 24)}小时`;
-    } else {
-      return `${interval}天`;
-    }
-  },
-  // 新增：格式化实际间隔
-  formatRealGap(index, time) {
-    const history = this.data.history;
-    const addTime = this.data.addTime;
-    let realGap = '';
-    if (index === 0 && addTime) {
-      const gapMs = time - addTime;
-      if (gapMs < 3600*1000) {
-        realGap = `（实际：${Math.round(gapMs/60000)}分钟）`;
-      } else if (gapMs < 24*3600*1000) {
-        realGap = `（实际：${Math.round(gapMs/3600000)}小时）`;
-      } else {
-        realGap = `（实际：${Math.round(gapMs/86400000)}天）`;
-      }
-    } else if (index > 0) {
-      const gapMs = time - history[index-1].time;
-      if (gapMs < 3600*1000) {
-        realGap = `（实际：${Math.round(gapMs/60000)}分钟）`;
-      } else if (gapMs < 24*3600*1000) {
-        realGap = `（实际：${Math.round(gapMs/3600000)}小时）`;
-      } else {
-        realGap = `（实际：${Math.round(gapMs/86400000)}天）`;
-      }
-    }
-    return realGap;
-  },
-  // 新增：格式化efactor
-  formatEfactor(efactor) {
-    return typeof efactor === 'number' ? efactor.toFixed(2) : efactor;
   },
   // 新增：加载更多历史
   loadMoreHistory() {

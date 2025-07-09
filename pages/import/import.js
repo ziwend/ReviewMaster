@@ -9,6 +9,7 @@ Page({
     showProgressBar: false,
     progress: 0,
     importing: false,
+    exampleText: `示例：\nquestion,answer,media\n苹果的英文是什么,apple,https://example.com/audio/apple.mp3|https://example.com/image/apple.jpg\n香蕉的英文是什么,banana,https://example.com/audio/banana.mp3\n请写出“太阳”的英文,sun,https://example.com/image/sun.png\n中国的首都是哪里,Beijing,`
   },
   onLoad: async function (options) {
     await this.loadGroups();
@@ -72,7 +73,7 @@ Page({
               filePath: tempFilePath,
               encoding: 'utf-8',
               success: (res) => {
-                this.handleJsonContent(res.data);
+                this.handleTextContent(res.data);
               },
               fail: (e) => {
                 wx.showToast({ title: '读取文件失败', icon: 'none' });
@@ -111,7 +112,7 @@ Page({
         const res = await wx.chooseMessageFile({
           count: 1,
           type: 'file',
-          extension: ['json'],
+          extension: ['txt', 'csv'],
         });
         const tempFilePath = res.tempFiles[0].path;
         const fs = wx.getFileSystemManager();
@@ -123,7 +124,7 @@ Page({
             fail: reject,
           });
         });
-        this.handleJsonContent(content);
+        this.handleTextContent(content);
         return;
       } catch (err) {
         wx.showToast({ title: '当前小程序环境不支持导入文件', icon: 'none' });
@@ -138,54 +139,70 @@ Page({
       : alert('当前环境不支持导入');
     this.setData({ showProgressBar: false, importing: false });
   },
-
-  startImportFromTextarea() {
-    this.setData({ showProgressBar: true, progress: 0 });
-    this.handleJsonContent(this.data.content);
-  },
   
-  handleJsonContent(content) {
-    try {
-      if (!content || !content.trim().startsWith('[')) {
-        throw new Error('内容不是有效的JSON数组格式，请以 [ 开头。');
-      }
-
-      const parsedList = JSON.parse(content);
-
-      if (!Array.isArray(parsedList)) {
-        throw new Error('JSON格式错误，顶层结构必须是一个数组。');
-      }
-      
-      const validItems = parsedList.filter(item => {
-        const hasQuestion = item && typeof item.question !== 'undefined';
-        const hasAnswer = item && typeof item.answer !== 'undefined';
-        if (!hasQuestion || !hasAnswer) {
-          console.warn('跳过无效的导入项 (缺少question或answer):', item);
-        }
-        return hasQuestion && hasAnswer;
+  /**
+   * 导入文件格式举例：
+   * question,answer,audio,image
+   * 苹果的英文是什么,apple,https://example.com/audio/apple.mp3,https://example.com/image/apple.jpg
+   * 香蕉的英文是什么,banana,https://example.com/audio/banana.mp3,
+   * 请写出“太阳”的英文,sun,,https://example.com/image/sun.png
+   * 中国的首都是哪里,Beijing,,
+   * 
+   * 支持带表头（如 question,answer,audio,image），会自动跳过首行
+   * audio/image 字段可用 | 分隔多个
+   */
+  handleTextContent(content) {
+    // 支持 txt/csv 格式：每行一个知识点，格式为 question,answer,audio,image（audio/image 可选，多个用|分隔）
+    let lines = content.split(/\r?\n/).filter(line => line.trim());
+    if (lines.length === 0) return;
+    // 解析表头
+    let header = lines[0].split(',').map(h => h.trim().toLowerCase());
+    let hasHeader = /question|题目|answer|答案|audio|image/.test(lines[0]);
+    let colIdx = { question: 0, answer: 1, audio: 2, image: 3 };
+    if (hasHeader) {
+      header.forEach((h, i) => {
+        if (h === 'question' || h === '题目') colIdx.question = i;
+        if (h === 'answer' || h === '答案') colIdx.answer = i;
+        if (h === 'audio') colIdx.audio = i;
+        if (h === 'image') colIdx.image = i;
       });
-
-      if (validItems.length !== parsedList.length) {
-          wx.showToast({
-              title: `部分条目无效，已跳过`,
-              icon: 'none'
-          });
-      }
-
-      if (validItems.length > 0) {
-        this.setData({ importing: true });
-
-        this.processInBatches(validItems, this.data.groups[this.data.groupIndex].id);
-      } else {
-        wx.showToast({ title: '没有可导入的有效内容', icon: 'none' });
-        this.setData({ importing: false, showProgressBar: false });
-      }
-
-    } catch (e) {
-      console.error('导入内容解析失败', e);
-      wx.showToast({ title: `解析失败: ${e.message}`, icon: 'none', duration: 3000 });
-      this.setData({ importing: false, showProgressBar: false });
+      lines = lines.slice(1);
     }
+    const items = lines.map(line => {
+      const cols = line.split(',');
+      const question = cols[colIdx.question] || '';
+      const answer = cols[colIdx.answer] || '';
+      if (!question.trim() || !answer.trim()) return null;
+      let media = [];
+      // 解析 audio 列
+      if (cols[colIdx.audio]) {
+        media = media.concat(
+          cols[colIdx.audio].split('|').map(url => {
+            url = url.trim();
+            if (!url) return null;
+            return { type: 'audio', url };
+          }).filter(Boolean)
+        );
+      }
+      // 解析 image 列
+      if (cols[colIdx.image]) {
+        media = media.concat(
+          cols[colIdx.image].split('|').map(url => {
+            url = url.trim();
+            if (!url) return null;
+            return { type: 'image', url };
+          }).filter(Boolean)
+        );
+      }
+      return { question: question.trim(), answer: answer.trim(), media };
+    }).filter(Boolean);
+    if (items.length === 0) {
+      wx.showToast({ title: '没有可导入的有效内容', icon: 'none' });
+      this.setData({ importing: false, showProgressBar: false });
+      return;
+    }
+    this.setData({ importing: true });
+    this.processInBatches(items, this.data.groups[this.data.groupIndex].id);
   },
 
   async processInBatches(items, groupId) {

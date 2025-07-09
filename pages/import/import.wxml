@@ -12,12 +12,10 @@
 
   <!-- 内容输入，填满剩余空间 -->
   <view class="card flex-card">
-    <view class="card-header">手动输入或粘贴内容</view>
-    <textarea class="content-textarea"
-              value="{{content}}"
-              bindinput="bindContentInput"
-              placeholder='[{"question": "太阳的颜色是什么？", "answer": "黄色", "media": [{ "type": "image", "url": "https://example.com/sun.jpg" }]}]'
-              maxlength="-1" />
+    <view class="card-header">参考格式</view>
+    <view class="import-example" style="white-space:pre-line; font-family:monospace; background:#f7f7f7; padding:10px; border-radius:6px; margin-bottom:12px;">
+      {{exampleText}}
+    </view>
   </view>
 
   <!-- 导入进度 -->
@@ -28,10 +26,6 @@
 
   <!-- 底部操作 -->
   <view class="bottom-actions" wx:if="{{!importing}}">
-    <view class="btn-wrapper btn-primary">
-      <view class="btn-text">从输入框导入</view>
-      <button class="btn-action" bindtap="startImportFromTextarea"></button>
-    </view>
     <view class="btn-wrapper btn-secondary">
       <view class="btn-text">从文件导入</view>
       <button class="btn-action" bindtap="importFromTxt"></button>

@@ -3,62 +3,74 @@ const storage = require('../../utils/storage')
 Page({
   data: {
     groups: [],
-    groupIndex: 0,
-    currentGroupId: null,
+    groupId: null,
+    currentGroup: {},
     masteredList: [],
     isEmpty: false,
+    page: 1,
+    pageSize: 20,
+    totalCount: 0,
+    hasMore: false,
+    totalPage: 0,
   },
 
   onLoad: async function (options) {
-    await this.initData();
+    const { groupId } = options;
+    await this.initData(groupId);
   },
 
   onShow: async function () {
-    await this.initData();
+    // await this.initData();
   },
 
-  initData: async function() {
-    const groups = await storage.getAllGroups() || [];
-    const groupIndex = this.data.groupIndex < groups.length ? this.data.groupIndex : 0;
-    const currentGroupId = groups.length > 0 ? groups[groupIndex].id : null;
-    
-    this.setData({
-      groups: groups,
-      groupIndex: groupIndex,
-      currentGroupId: currentGroupId,
-    });
-    
-    if (currentGroupId) {
-      await this.loadMasteredList();
-    } else {
-      this.setData({
-        masteredList: [],
-        isEmpty: true,
+  initData: async function (groupId) {
+    const groups = storage.getAllGroups();
+    const currentGroup = groups.find(g => g.id == groupId) || (groups && groups[0]) || {};
+    if (currentGroup && currentGroup.name) {
+      wx.setNavigationBarTitle({
+        title: currentGroup.name
       });
     }
-  },
-
-  onGroupChange: async function (e) {
-    const groupIndex = e.detail.value;
     this.setData({
-      groupIndex: groupIndex,
-      currentGroupId: this.data.groups[groupIndex].id,
+      groupId,
+      currentGroup,
+      page: 1
     });
-    await this.loadMasteredList();
+    await this.loadMasteredList(1);
   },
 
-  loadMasteredList: async function () {
-    if (!this.data.currentGroupId) {
+
+  loadMasteredList: async function (page = 1) {
+    if (!this.data.groupId) {
       this.setData({ masteredList: [], isEmpty: true });
       return;
     }
-    const allKnowledge = await storage.getGroupData(this.data.currentGroupId) || [];
-    const masteredList = allKnowledge.filter(k => k.status === 'mastered');
-    
+    const settings = storage.getSettings();
+    const pageSize = settings.batchSize || 20;
+    const totalCount = this.data.currentGroup.masteredCount;
+    const masteredList = storage.getMasteredPaged(this.data.groupId, page, pageSize);
+    const totalPage = Math.ceil(totalCount / pageSize);
     this.setData({
-      masteredList: masteredList,
+      masteredList,
       isEmpty: masteredList.length === 0,
+      page,
+      pageSize,
+      totalCount,
+      totalPage,
+      hasMore: page < totalPage
     });
+  },
+
+  prevPage() {
+    if (this.data.page > 1) {
+      this.loadMasteredList(this.data.page - 1);
+    }
+  },
+
+  nextPage() {
+    if (this.data.page < this.data.totalPage) {
+      this.loadMasteredList(this.data.page + 1);
+    }
   },
 
   restoreKnowledge: async function (e) {
@@ -68,7 +80,7 @@ Page({
       knowledge.status = 'pending';
       knowledge.nextReviewTime = Date.now();
       await storage.updateKnowledge(knowledge);
-      
+
       await this.loadMasteredList();
 
       wx.showToast({
@@ -78,11 +90,11 @@ Page({
     }
   },
 
-  removeKnowledge: async function(e) {
+  removeKnowledge: async function (e) {
     const id = e.currentTarget.dataset.id
-    const { currentGroupId } = this.data;
-    if (!currentGroupId) return;
-
+    const { groupId } = this.data;
+    if (!groupId) return;
+    console.log("removeKnowledge", id, groupId);
     try {
       await new Promise((resolve, reject) => {
         wx.showModal({
@@ -91,17 +103,20 @@ Page({
           success: res => res.confirm ? resolve() : reject(new Error('用户取消'))
         });
       });
-      await storage.removeKnowledge(id, currentGroupId);
+      await storage.removeKnowledge(id, groupId);
       await this.loadMasteredList();
     } catch (error) {
       // 用户取消，不做任何事
+      console.log("removeKnowledge error", error);
     }
   },
 
   toGroups() {
     wx.navigateTo({ url: '/pages/groups/groups' })
   },
-
+  goBack() {
+    wx.reLaunch({ url: '/pages/groups/groups' })
+  },
   // 新增：点击知识点显示复习记录
   showHistory(e) {
     const { id } = e.currentTarget.dataset;

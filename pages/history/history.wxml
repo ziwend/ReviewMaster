@@ -16,9 +16,9 @@
         <view class="history-row">
           <text class="history-label">分数：</text>
           <text class="history-score">{{item.displayScore}}</text>
-          <text class="history-label">间隔：</text>
-          <text class="history-interval">{{item.displayInterval}}</text>
           <text class="history-realgap">{{item.displayRealGap}}</text>
+          <text class="history-label">下次间隔：</text>
+          <text class="history-interval">{{item.displayInterval}}</text>          
         </view>
         <view class="history-row">
           <text class="history-label">efactor：</text>

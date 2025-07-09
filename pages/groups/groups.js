@@ -8,51 +8,25 @@ Page({
   data: {
     groups: [],
     newGroupName: '',
-    loading: true
   },
 
-  onLoad: function () {
-    // this.loadGroups();
-  },
-
-  onShow: function () {
+  onLoad: function () {    
     this.loadGroups();
+    console.log("on load group", JSON.stringify(this.data.groups, null, 2));
+    
+  },
+
+  onShow: async function () {
+    // 全量更新并加载
+    storage.refreshAllGroupStats().then(() => {
+    this.loadGroups(); // 刷新后再同步一次
+    });
+    console.log("on show group");
   },
 
   loadGroups: function () {
     // 只加载分组基本信息和统计字段
-    const groups = getApp().globalData.groups.map(g => ({
-      id: g.id,
-      name: g.name,
-      knowledgeCount: g.knowledgeCount,
-      unmasteredCount: g.unmasteredCount || 0,
-      learnedCount: g.learnedCount || 0
-    }));
-    this.setData({
-      groups,
-      newGroupName: '',
-      loading: false
-    }, () => {
-      // dueCount可能有变
-      this.updateGroupStats();
-    });
-  },
-
-  updateGroupStats: function () {
-    storage.refreshAllReviewLists();
-
-    // 只更新dueCount字段
-    const dueCountMap = {};
-    getApp().globalData.groups.forEach(g => {
-      dueCountMap[g.id] = g.dueCount || 0;
-    });
-
-    // 更新this.data.groups中的dueCount
-    const groups = this.data.groups.map(g => ({
-      ...g,
-      dueCount: dueCountMap[g.id] || 0
-    }));
-
+    const groups = storage.getAllGroups();
     this.setData({ groups });
   },
 
@@ -103,7 +77,8 @@ Page({
 
   toReviewPage: function (e) {
     const { id } = e.currentTarget.dataset;
-    const group = getApp().globalData.groups.find(g => g.id == id);
+    const group = storage.getAllGroups().find(g => g.id == id);
+    console.log("group click",group.groupName);
     if (group && group.knowledgeCount === 0) {
       wx.navigateTo({
         url: `/pages/import/import?groupId=${id}`

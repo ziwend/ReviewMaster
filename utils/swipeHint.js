@@ -40,6 +40,31 @@ function createSwipeHandler(type) {
   };
 }
 
+// 节流工具函数
+function throttle(fn, delay) {
+  let lastCall = 0;
+  let timer = null;
+  function throttled(...args) {
+    const now = Date.now();
+    if (now - lastCall < delay) {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        lastCall = Date.now();
+        fn.apply(this, args);
+      }, delay);
+    } else {
+      lastCall = now;
+      fn.apply(this, args);
+    }
+  }
+  throttled.clear = function() {
+    clearTimeout(timer);
+    timer = null;
+  };
+  return throttled;
+}
+
 module.exports = {
-  createSwipeHandler
+  createSwipeHandler,
+  throttle
 }; 

@@ -5,8 +5,9 @@
 class LRUCache {
   constructor(capacity = 100) {
     this.capacity = capacity;
-    this.cache = new Map();
-    this.accessQueue = [];
+    this.cache = new Map(); // 存储键值对
+    this.accessMap = new Map(); // 存储键->时间戳映射
+    this.accessQueue = []; // 保留队列用于淘汰
   }
 
   /**
@@ -33,8 +34,8 @@ class LRUCache {
     if (this.cache.has(key)) {
       this._updateAccess(key);
     } else {
-      // 检查容量
-      if (this.accessQueue.length >= this.capacity) {
+      // 循环淘汰直到有足够空间
+      while (this.accessQueue.length >= this.capacity) {
         this._evict();
       }
       this.accessQueue.push(key);
@@ -69,6 +70,9 @@ class LRUCache {
    * @param {string} key 缓存键
    */
   _updateAccess(key) {
+    // 使用时间戳更新访问记录
+    this.accessMap.set(key, Date.now());
+    // 更新队列中的位置
     const index = this.accessQueue.indexOf(key);
     if (index > -1) {
       this.accessQueue.splice(index, 1);
@@ -83,6 +87,7 @@ class LRUCache {
     const keyToRemove = this.accessQueue.shift();
     if (keyToRemove) {
       this.cache.delete(keyToRemove);
+      this.accessMap.delete(keyToRemove);
     }
   }
 }

@@ -66,14 +66,15 @@ Page({
       title: '保存成功',
       icon: 'success'
     });
+    this.loadSettings();
     setTimeout(() => {
       wx.navigateBack();
     }, 1000);
   },
 
   handleRestore() {
-    const defaultSettings = storage.getDefaultSettings();
-    storage.saveSettings(defaultSettings);
+    storage.restoreSettings();
+    const defaultSettings = storage.getSettings();
     this.setData({
       settings: defaultSettings,
       groupEfactorMap: { ...(defaultSettings.groupEfactorMap || {}) }

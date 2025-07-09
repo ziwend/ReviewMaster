@@ -1,34 +1,46 @@
 <view class="container mastered-container">
-  <view class="page-header">
-    <view class="page-title">{{currentGroup.name}}</view>
-    <view class="page-subtitle">已掌握的知识</view>
-  </view>
-
-  <!-- 已掌握列表 -->
-  <block wx:if="{{masteredList.length > 0}}">
-    <view class="mastered-list">
-      <view class="card mastered-card" wx:for="{{masteredList}}" wx:key="id">
-        <view class="card-content" bindtap="showHistory" data-id="{{item.id}}">
-          <view class="question-text">{{item.question}}</view>
-        </view>
-        <view class="card-actions">
-          <view class="btn-wrapper btn-primary restore-btn">
-            <view class="btn-text">恢复</view>
-            <button class="btn-action" bindtap="restoreKnowledge" data-id="{{item.id}}"></button>
-          </view>
-          <image class="action-icon delete-icon" src="/components/icons/delete.svg" bindtap="removeKnowledge" data-id="{{item.id}}" />
-        </view>
-      </view>
+    <view class="page-header">
+        <view class="page-title">已掌握的知识</view>
+        <view class="page-subtitle">{{currentGroup.masteredCount}}</view>
     </view>
-  </block>
 
-  <!-- 空状态 -->
-  <view class="empty-state mastered-empty" wx:else>
-    <image class="empty-icon" src="/components/icons/empty.svg" mode="aspectFit"></image>
-    <view class="empty-state-text">还没有已掌握的知识</view>
-    <view class="btn-wrapper btn-primary group-btn">
-        <view class="btn-text">知识管理</view>
-        <button class="btn-action" bindtap="toGroups"></button>
+    <!-- 已掌握列表 -->
+    <block wx:if="{{masteredList.length > 0}}">
+        <view class="mastered-list">
+            <view class="card mastered-card" wx:for="{{masteredList}}" wx:key="id">
+                <view class="card-content" bindtap="showHistory" data-id="{{item.id}}">
+                    <view class="question-text">{{item.question}}</view>
+                </view>
+                <view class="card-actions">
+                    <view class="btn-wrapper btn-primary restore-btn">
+                        <view class="btn-text">恢复</view>
+                        <button class="btn-action" bindtap="restoreKnowledge" data-id="{{item.id}}"></button>
+                    </view>
+                    <image class="action-icon delete-icon" src="/components/icons/delete.svg" bindtap="removeKnowledge" data-id="{{item.id}}" />
+                </view>
+            </view>
+        </view>
+    </block>
+
+    <!-- 分页控件 -->
+    <view class="pagination" wx:if="{{totalPage > page}}">
+        <button class="btn-prev" bindtap="prevPage" wx:disabled="{{page <= 1}}">上一页</button>
+        <text>第{{page}}/{{totalPage}}页</text>
+        <button class="btn-next" bindtap="nextPage" wx:disabled="{{!hasMore}}">下一页</button>
     </view>
-  </view>  
+    <view class="empty-state mastered-empty" wx:if="{{totalPage === page}}">
+        <view class="btn-wrapper btn-primary group-btn">
+            <view class="btn-text">返回分组</view>
+            <button class="btn-action" bindtap="goBack"></button>
+        </view>
+    </view>
+    <!-- 空状态 -->
+    <view class="empty-state mastered-empty" wx:else>
+        <image class="empty-icon" src="/components/icons/empty.svg" mode="aspectFit"></image>
+        <view class="empty-state-text">还没有已掌握的知识</view>
+        <view class="btn-wrapper btn-primary group-btn">
+            <view class="btn-text">知识管理</view>
+            <button class="btn-action" bindtap="goBack"></button>
+        </view>
+    </view>
 </view>

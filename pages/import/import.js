@@ -9,7 +9,7 @@ Page({
     showProgressBar: false,
     progress: 0,
     importing: false,
-    exampleText: `示例：\nquestion,answer,media\n苹果的英文是什么,apple,https://example.com/audio/apple.mp3|https://example.com/image/apple.jpg\n香蕉的英文是什么,banana,https://example.com/audio/banana.mp3\n请写出“太阳”的英文,sun,https://example.com/image/sun.png\n中国的首都是哪里,Beijing,`
+    exampleText: `示例：\nquestion,answer,audio,image\n苹果的英文是什么,apple,https://example.com/audio/apple.mp3,https://example.com/image/apple.jpg\n香蕉的英文是什么,banana,https://example.com/audio/banana.mp3,\n请写出“太阳”的英文,sun,,https://example.com/image/sun.png\n中国的首都是哪里,Beijing,,`
   },
   onLoad: async function (options) {
     await this.loadGroups();

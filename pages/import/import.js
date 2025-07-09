@@ -169,7 +169,11 @@ Page({
       lines = lines.slice(1);
     }
     const items = lines.map(line => {
-      const cols = line.split(',');
+      let cols = line.split(',');
+      // 合并多余列到最后一列，保证总是4列
+      if (cols.length > 4) {
+        cols = [cols[0], cols[1], cols[2], cols.slice(3).join(',')];
+      }
       const question = cols[colIdx.question] || '';
       const answer = cols[colIdx.answer] || '';
       if (!question.trim() || !answer.trim()) return null;

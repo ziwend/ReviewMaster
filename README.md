@@ -283,13 +283,13 @@ storage.reportPerf();
 
 ### 依赖安装
 ```bash
-npm install
+npm install mocha
 ```
 
 ### 单元测试
 ```bash
 # 运行 tests/storage.test.js 进行核心存储逻辑测试
-npm test
+npx mocha tests/storage.test.js
 ```
 ## 注意事项
 1. 所有数据存储在本地，卸载小程序将丢失数据

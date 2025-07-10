@@ -48,7 +48,7 @@ Page({
         const unlearnedCount = currentGroup.unlearnedCount;
         const totalBatchCount = Math.ceil(unlearnedCount / pageSize);
 
-        const hideGuide = wx.getStorageSync('hideLearnGestureGuide');
+        const hideGuide = storage.perfGetStorageSync('hideLearnGestureGuide');
         this.settings = storage.getSettings();
         const pageSize = this.settings.batchSize || 20;
         
@@ -71,17 +71,15 @@ Page({
     },
 
     onShow: function () {
+        this.loadGroups();
         console.log("learn on show");
     },
-
+    loadGroups: function () {
+        // 只加载分组基本信息和统计字段
+        const groups = storage.getAllGroups();
+        this.setData({ groups });
+      },
     onUnload: function () {
-        // 页面卸载时清除缓存
-        storage.clearCache('all');
-        // 解除globalData.groups引用
-        const app = getApp();
-        if (app && app.globalData) {
-            app.globalData.groups = null;
-        }
         console.log("learn on unload");
     },
 
@@ -98,6 +96,7 @@ Page({
             current,
             currentIndex: 0
         });
+        storage.reportPerf();
     },
 
     // 新增：加载下一页
@@ -112,16 +111,6 @@ Page({
             this.loadNextBatch(newPage);
         });
     },
-
-    // 新增：重置分页
-    resetPaging() {
-        this.setData({
-            page: 1
-        }, () => {
-            this.loadNextBatch();
-        });
-    },
-
 
     // 统一批次完成处理
     handleBatchCompleted() {
@@ -275,7 +264,7 @@ Page({
             }, () => {
                 setTimeout(() => {
                     if (direction === -1) this.markLearned();
-                    else if (direction === 1) console.log("learn swipe to right");
+                    else if (direction === 1) wx.showToast({title: '您向右滑动，表示稍后学习该知识点',icon: 'none'});
                     this.nextOne();
                 }, 300);
             });
@@ -312,7 +301,7 @@ Page({
                 showGestureGuide: false,
                 gestureGuideActive: false
             });
-            wx.setStorageSync('hideLearnGestureGuide', true);
+            storage.perfSetStorageSync('hideLearnGestureGuide', true);
             wx.showModal({
                 title: '提示',
                 content: '您向左滑动，表示已学会该知识点，将跳转至下一个知识点',
@@ -330,7 +319,7 @@ Page({
                 showGestureGuide: false,
                 gestureGuideActive: false
             });
-            wx.setStorageSync('hideLearnGestureGuide', true);
+            storage.perfSetStorageSync('hideLearnGestureGuide', true);
             wx.showModal({
                 title: '提示',
                 content: '您向右滑动，表示稍后学习该知识点',

@@ -72,7 +72,7 @@ Page({
                 title: currentGroup.name
             });
         }
-        const hideGuide = wx.getStorageSync('hideReviewGestureGuide');
+        const hideGuide = storage.perfGetStorageSync('hideReviewGestureGuide');
         this.settings = storage.getSettings();
         const pageSize = this.settings.batchSize || 20;
         const allDueCount = currentGroup.dueCount;
@@ -89,7 +89,7 @@ Page({
         }, () => {
             this.loadNextBatch();
         });
-        console.log("currentGroup", JSON.stringify(currentGroup, null, 2));
+
         this.qThrottledSetHint = throttle((hint, x, y) => {
             qSwipeHandler.updateHint.call(this, hint, x, y);
         }, 50);
@@ -99,24 +99,15 @@ Page({
     },
 
     onShow: function () {
+        this.loadGroups();
         this.settings = storage.getSettings();
         console.log("review on show");
     },
-
-    /**
-     * 页面卸载时，清除定时器
-     */
-    onUnload: function () {
-        // 页面卸载时清除缓存
-        storage.clearCache('all');
-        // 解除globalData.groups引用
-        const app = getApp();
-        if (app && app.globalData) {
-            app.globalData.groups = null;
-        }
-        console.log("review on unload");
-    },
-
+    loadGroups: function () {
+        // 只加载分组基本信息和统计字段
+        const groups = storage.getAllGroups();
+        this.setData({ groups });
+      },
     loadNextBatch(page) {
         const {
             groupId,
@@ -136,7 +127,6 @@ Page({
             });
         }
 
-        console.log("review loadNextBatch current=", JSON.stringify(current), page, reviewList.length);
         storage.reportPerf();
     },
 
@@ -150,14 +140,6 @@ Page({
             currentBatchIndex: newBatchIndex,
         }, () => {
             this.loadNextBatch(newPage);
-        });
-    },
-
-    resetPagingThenLoadMore() {
-        this.setData({
-            page: 1
-        }, () => {
-            this.loadNextBatch();
         });
     },
 
@@ -293,6 +275,7 @@ Page({
         // 需重新学习
         else {
             current.status = 'pending';
+            current.repetition = 0;
         }
         storage.saveKnowledge(current);
     },
@@ -453,7 +436,7 @@ Page({
                 showGestureGuide: false,
                 gestureGuideActive: false
             });
-            wx.setStorageSync('hideReviewGestureGuide', true);
+            storage.perfSetStorageSync('hideReviewGestureGuide', true);
             wx.showModal({
                 title: '提示',
                 content: '您向下滑动，将显示答案',
@@ -476,7 +459,7 @@ Page({
                 showGestureGuide: false,
                 gestureGuideActive: false
             });
-            wx.setStorageSync('hideReviewGestureGuide', true);
+            storage.perfSetStorageSync('hideReviewGestureGuide', true);
             wx.showModal({
                 title: '提示',
                 content: '您向上滑动，将显示答案',

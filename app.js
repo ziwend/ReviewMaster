@@ -4,9 +4,7 @@ App({
     groups: []
   },
   onLaunch() {
-    this.refreshGroups();
+    this.globalData.groups = require('./utils/storage').perfGetStorageSync('groups') || [];
   },
-  refreshGroups() {
-    this.globalData.groups = wx.getStorageSync('groups') || [];
-  }
+
 });

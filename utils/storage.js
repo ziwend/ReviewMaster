@@ -23,6 +23,7 @@ const GroupManager = (() => {
     storageWriteTime: 0,
     groupDataLoadTime: 0,
     knowledgeLoadTime: 0,
+    storageQuotaUsage: 0, // 新增，防止未定义
 
     // 获取缓存命中率
     getGroupCacheHitRate() {
@@ -93,6 +94,44 @@ const GroupManager = (() => {
   const groupCache = new LRUCache(100); // 分组缓存容量
   const knowledgeCache = new LRUCache(500); // 知识点缓存容量
 
+  // mockStorage 适配：仅在 Node 测试环境下生效
+  const isNode = typeof process !== 'undefined' && process.versions && process.versions.node;
+  const mockStorage = {};
+
+  function getStorageSync(key) {
+    if (isNode) return mockStorage[key];
+    return wx.getStorageSync(key);
+  }
+  function setStorageSync(key, value) {
+    if (isNode) { mockStorage[key] = value; return; }
+    wx.setStorageSync(key, value);
+  }
+  function removeStorageSync(key) {
+    if (isNode) { delete mockStorage[key]; return; }
+    wx.removeStorageSync(key);
+  }
+
+  // perfGetStorageSync/perfSetStorageSync/perfRemoveStorageSync 也全部用上述包装
+  function perfGetStorageSync(key) {
+    const start = Date.now();
+    perfMetrics.storageReads++;
+    const result = getStorageSync(key);
+    perfMetrics.storageReadTime += Date.now() - start;
+    return result;
+  }
+  function perfSetStorageSync(key, value) {
+    const start = Date.now();
+    perfMetrics.storageWrites++;
+    setStorageSync(key, value);
+    perfMetrics.storageWriteTime += Date.now() - start;
+  }
+  function perfRemoveStorageSync(key) {
+    const start = Date.now();
+    perfMetrics.storageWrites++;
+    removeStorageSync(key);
+    perfMetrics.storageWriteTime += Date.now() - start;
+  }
+
   const defaultSettings = {
     batchSize: 20,
     efactor: 2.5, // 新增：全局默认efactor
@@ -105,7 +144,7 @@ const GroupManager = (() => {
     if (app && app.globalData && app.globalData.settings) {
       return { ...defaultSettings, ...app.globalData.settings };
     }
-    const settings = wx.getStorageSync('app_settings');
+    const settings = perfGetStorageSync('app_settings');
     const merged = settings ? { ...defaultSettings, ...settings } : defaultSettings;
 
     if (app && app.globalData) app.globalData.settings = merged;
@@ -113,7 +152,7 @@ const GroupManager = (() => {
   }
 
   function saveSettings(settings) {
-    wx.setStorageSync('app_settings', settings);
+    perfSetStorageSync('app_settings', settings);
     const app = typeof getApp === 'function' ? getApp() : null;
     if (app && app.globalData) app.globalData.settings = settings;
   }
@@ -121,16 +160,29 @@ const GroupManager = (() => {
     saveSettings(defaultSettings);
   }
 
-
+  // 公共函数：只同步全局变量，不做本地存储
+  function setGlobalGroups(groups) {
+    if (typeof process !== 'undefined' && process.versions && process.versions.node) {
+      // Node环境下不做任何事，仅仅测试用
+      return;
+    }
+    if (typeof getApp === 'function') {
+      const app = getApp();
+      if (app && app.globalData) app.globalData.groups = groups;
+    }
+  }
   // --- Group Functions ---
   function getAllGroups() {
+    if (typeof process !== 'undefined' && process.versions && process.versions.node) {
+      const groups = perfGetStorageSync('groups') || [];
+      return groups;
+    }
     const app = typeof getApp === 'function' ? getApp() : null;
     if (app && app.globalData && Array.isArray(app.globalData.groups) && app.globalData.groups.length > 0) {
       return app.globalData.groups;
     }
-    // 全局变量为空时从本地存储同步
-    const groups = wx.getStorageSync('groups') || [];
-    if (app && app.globalData) app.globalData.groups = groups;
+    const groups = perfGetStorageSync('groups') || [];
+    if (groups) setGlobalGroups(groups);
     return groups;
   }
 
@@ -141,22 +193,28 @@ const GroupManager = (() => {
         id: getNextId('nextGroupId'),
         name: groupName,
         knowledgeCount: 0,
+        learnedCount: 0,
+        masteredCount: 0,
+        unmasteredCount: 0,
+        unlearnedCount: 0,
+        dueCount: 0,
         createTime: Date.now()
       };
       groups.push(newGroup);
-      wx.setStorageSync('groups', groups);
-      // 更新全局groups
-      if (typeof getApp === 'function') getApp().globalData.groups = groups;
+      perfSetStorageSync('groups', groups);
+      setGlobalGroups(groups);
       // 为新组创建一个空的知识点索引
-      wx.setStorageSync(`group-${newGroup.id}`, []);
+      perfSetStorageSync(`group-${newGroup.id}`, []);
 
       return newGroup;
     } catch (error) {
       console.error('addGroup failed:', error);
-      wx.showToast({
-        title: '添加分组失败',
-        icon: 'none'
-      });
+      if (typeof wx !== 'undefined' && wx.showToast) {
+        wx.showToast({
+          title: '添加分组失败',
+          icon: 'none'
+        });
+      }
       throw error;
     }
   }
@@ -164,8 +222,8 @@ const GroupManager = (() => {
   // 辅助函数：获取下一个ID
   function getNextId(key) {
     try {
-      let nextId = wx.getStorageSync(key) || 1;
-      wx.setStorageSync(key, nextId + 1);
+      let nextId = perfGetStorageSync(key) || 1;
+      perfSetStorageSync(key, nextId + 1);
       return nextId;
     } catch (error) {
       console.error(`getNextId failed for key ${key}:`, error);
@@ -178,9 +236,8 @@ const GroupManager = (() => {
     const index = groups.findIndex(g => g.id === groupToUpdate.id);
     if (index !== -1) {
       groups[index].name = groupToUpdate.name;
-      wx.setStorageSync('groups', groups);
-      // 更新全局groups
-      if (typeof getApp === 'function') getApp().globalData.groups = groups;
+      perfSetStorageSync('groups', groups);
+      setGlobalGroups(groups);
     }
   }
 
@@ -188,18 +245,17 @@ const GroupManager = (() => {
     // 1. 从分组列表中移除
     let groups = getAllGroups();
     const updatedGroups = groups.filter(g => g.id !== groupId);
-    wx.setStorageSync('groups', updatedGroups);
-    // 更新全局groups
-    if (typeof getApp === 'function') getApp().globalData.groups = updatedGroups;
+    perfSetStorageSync('groups', updatedGroups);
+    setGlobalGroups(updatedGroups);
     // 2. 删除该分组下的所有知识点详情
     const groupKey = `group-${groupId}`;
-    const knowledgeIds = wx.getStorageSync(groupKey) || [];
+    const knowledgeIds = perfGetStorageSync(groupKey) || [];
     knowledgeIds.forEach(id => {
-      wx.removeStorageSync(`knowledge-${id}`);
+      perfRemoveStorageSync(`knowledge-${id}`);
       clearCache('knowledge', id);
     });
     // 3. 删除分组索引本身
-    wx.removeStorageSync(groupKey);
+    perfRemoveStorageSync(groupKey);
     // 缓存同步：清除分组缓存
     clearCache('group', groupId);
   }
@@ -213,9 +269,9 @@ const GroupManager = (() => {
       return cachedIds;
     }
     perfMetrics.groupCacheMisses++;
-    const ids = wx.getStorageSync(`group-${groupId}`) || [];
+    const ids = perfGetStorageSync(`group-${groupId}`) || [];
     groupCache.set(groupId, ids);
-    return ids;
+    return ids ? [...ids] : [];
   }
 
   // --- 缓存管理函数 ---
@@ -263,7 +319,6 @@ const GroupManager = (() => {
     return { knowledgeCount, learnedCount, unlearnedCount, masteredCount, unmasteredCount, dueCount };
   }
   function updateGroupStats(groupId) {
-    // 只维护app.globalData.groups
     const groups = getAllGroups();
     const idx = groups.findIndex(g => g.id == groupId);
     if (idx === -1) return;
@@ -278,8 +333,8 @@ const GroupManager = (() => {
     groups[idx].unlearnedCount = stats.unlearnedCount;
     groups[idx].masteredCount = stats.masteredCount;
     groups[idx].unmasteredCount = stats.unmasteredCount;
-    // 同步更新全局变量
-    // if (typeof getApp === 'function') getApp().globalData.groups = groups;
+    perfSetStorageSync('groups', groups); // 保证mockStorage同步
+    setGlobalGroups(groups); // 兼容小程序端
   }
 
   // 学习的时候缓存下来，复习的时候就可以用了，小程序销毁时失效
@@ -289,12 +344,15 @@ const GroupManager = (() => {
     const cached = knowledgeCache.get(id);
     if (cached) {
       perfMetrics.knowledgeCacheHits++;
-      return cached;
+      return cached ? Object.assign({}, cached) : cached;
     }
 
     perfMetrics.knowledgeCacheMisses++;
-    const data = wx.getStorageSync(`knowledge-${id}`) || null;
-    if (data) knowledgeCache.set(id, data);
+    const data = perfGetStorageSync(`knowledge-${id}`) || null;
+    if (data) {
+      knowledgeCache.set(id, data);
+      return Object.assign({}, data);
+    }
     return data;
   }
 
@@ -351,7 +409,7 @@ const GroupManager = (() => {
 
     const groupKey = `group-${groupId}`;
     let knowledgeIds = getGroupKnowledgeIds(groupId);
-    let nextId = wx.getStorageSync('nextKnowledgeId') || 1;
+    let nextId = perfGetStorageSync('nextKnowledgeId') || 1;
 
     const newIds = [];
     // 分块处理避免UI阻塞
@@ -362,28 +420,27 @@ const GroupManager = (() => {
       knowledge.addTime = knowledge.addTime || Date.now();
       // 保持未学会知识点无 nextReviewTime，仅 learned=true 时由 markLearned 逻辑赋值
       knowledge.learned = typeof knowledge.learned === 'boolean' ? knowledge.learned : false;
-      wx.setStorageSync(`knowledge-${newKnowledgeId}`, knowledge);
+      perfSetStorageSync(`knowledge-${newKnowledgeId}`, knowledge);
       newIds.push(newKnowledgeId);
       nextId++;
     });
 
-    wx.setStorageSync('nextKnowledgeId', nextId);
+    perfSetStorageSync('nextKnowledgeId', nextId);
 
     const updatedIds = knowledgeIds.concat(newIds);
-    wx.setStorageSync(groupKey, updatedIds); //需要清空缓存    
+    perfSetStorageSync(groupKey, updatedIds); //需要清空缓存    
+    // 缓存同步：清除分组缓存
+    clearCache && clearCache('group', groupId);
 
     // 更新分组统计
     updateGroupStats(groupId);
-    // 缓存同步：清除分组缓存
-    clearCache && clearCache('group', groupId);
 
     let groups = getAllGroups();
     const groupIndex = groups.findIndex(g => g.id == groupId);
     if (groupIndex !== -1) {
-      // 更新全局变量groups
+      // 更新全本地groups
       groups[groupIndex].knowledgeCount = updatedIds.length;
-      wx.setStorageSync('groups', groups);
-      if (typeof getApp === 'function') getApp().globalData.groups = groups;
+      perfSetStorageSync('groups', groups);
     }
 
     return {
@@ -407,22 +464,17 @@ const GroupManager = (() => {
     perfMetrics.report();
   }
 
-  // 公共方法：批量刷新所有分组统计
+  // 公共方法：批量刷新所有分组统计，暂未用到
   async function refreshAllGroupStats() {
-    // 先异步刷新所有今日复习列表
     await refreshAllReviewListsAsync();
     const allGroups = getAllGroups();
-    // 分批异步刷新每个分组统计，避免阻塞主线程
     for (let i = 0; i < allGroups.length; i++) {
       await new Promise(resolve => setTimeout(() => {
         updateGroupStats(allGroups[i].id);
         resolve();
       }, 0));
     }
-    wx.setStorageSync('groups', allGroups);
-    const app = typeof getApp === 'function' ? getApp() : null;
-    if (app && app.globalData) app.globalData.groups = allGroups;
-    console.log("refreshAllGroupStats groups", JSON.stringify(allGroups, null, 2));
+    perfSetStorageSync('groups', getAllGroups());
   }
 
 
@@ -461,7 +513,7 @@ const GroupManager = (() => {
           });
         });
       } else {
-        wx.setStorageSync(`todayReviewList-${g.id}`, { date: getTodayStr(), ids });
+        perfSetStorageSync(`todayReviewList-${g.id}`, { date: getTodayStr(), ids });
       }
       // 只更新 dueCount 字段
       const app = typeof getApp === 'function' ? getApp() : null;
@@ -472,9 +524,9 @@ const GroupManager = (() => {
           groups[idx].dueCount = dueArr.length;
         }
       }
-      // 重新保存所有分组
-      wx.setStorageSync('groups', app.globalData.groups);
     }
+    // 重新保存所有分组
+    perfSetStorageSync('groups', getAllGroups());
   }
 
   // 同步刷新（兼容老接口）
@@ -497,9 +549,9 @@ const GroupManager = (() => {
   function resetTodayReviewListIfNeeded(groupId) {
     const key = `todayReviewList-${groupId}`;
     const today = getTodayStr();
-    let cache = wx.getStorageSync(key);
+    let cache = perfGetStorageSync(key);
     if (!cache || cache.date !== today) {
-      wx.removeStorageSync(key);
+      perfRemoveStorageSync(key);
     }
   }
 
@@ -512,7 +564,7 @@ const GroupManager = (() => {
   // 获取/生成今日复习批次（最多20条），只推送到期（now >= nextReviewTime）的知识点
   function getTodayReviewList(groupId, page = 1, pageSize = 20) {
     const key = `todayReviewList-${groupId}`;
-    const cache = wx.getStorageSync(key);
+    const cache = perfGetStorageSync(key);
     const ids = (cache && cache.date === getTodayStr() && Array.isArray(cache.ids)) ? cache.ids : [];
     // 兼容老代码：如果未传 page/pageSize，返回全部
     if (arguments.length === 1) {
@@ -593,20 +645,29 @@ const GroupManager = (() => {
       console.error('saveKnowledge failed: knowledge or knowledge.id is missing', knowledge);
       return;
     }
-    // 保存知识点
+    // 先取旧的
     const key = `knowledge-${knowledge.id}`;
-    wx.setStorageSync(key, knowledge);
+    const prev = perfGetStorageSync(key);
+
+    // 再写新的
+    perfSetStorageSync(key, knowledge);
     clearCache('knowledge', knowledge.id);
-    clearCache('group', knowledge.groupId);
 
     // 增量统计
     const app = typeof getApp === 'function' ? getApp() : null;
     if (app && app.globalData && Array.isArray(app.globalData.groups)) {
       const groups = app.globalData.groups;
       const idx = groups.findIndex(g => g.id == knowledge.groupId);
+
       if (idx !== -1) {
         const now = Date.now();
-        const prev = getKnowledgeByIdCached(knowledge.id);
+        // 初始化统计字段，防止undefined
+        if (typeof groups[idx].learnedCount !== 'number') groups[idx].learnedCount = 0;
+        if (typeof groups[idx].masteredCount !== 'number') groups[idx].masteredCount = 0;
+        if (typeof groups[idx].unlearnedCount !== 'number') groups[idx].unlearnedCount = 0;
+        if (typeof groups[idx].unmasteredCount !== 'number') groups[idx].unmasteredCount = 0;
+        if (typeof groups[idx].dueCount !== 'number') groups[idx].dueCount = 0;
+        if (typeof groups[idx].knowledgeCount !== 'number') groups[idx].knowledgeCount = 0;
         // learnedCount
         if (!prev && knowledge.learned) groups[idx].learnedCount += 1;
         else if (prev && !prev.learned && knowledge.learned) groups[idx].learnedCount += 1;
@@ -624,10 +685,11 @@ const GroupManager = (() => {
         const currDue = knowledge.learned && knowledge.status !== 'mastered' && knowledge.nextReviewTime <= now;
         if (!prevDue && currDue) groups[idx].dueCount += 1;
         else if (prevDue && !currDue) groups[idx].dueCount -= 1;
-        wx.setStorageSync('groups', groups);
+        perfSetStorageSync('groups', groups);
       }
     } else {
-      updateGroupStats(knowledge.groupId);
+      updateGroupStats(knowledge.groupId); // 同步更新全局变量      
+      perfSetStorageSync('groups', getAllGroups()); // 保存到本地
     }
   }
 
@@ -636,16 +698,16 @@ const GroupManager = (() => {
     const knowledge = getKnowledgeByIdCached(knowledgeId);
 
     // 1. 从知识点详情中删除
-    wx.removeStorageSync(`knowledge-${knowledgeId}`);
-    // 缓存同步：清除知识点缓存、分组缓存
-    clearCache && clearCache('knowledge', knowledgeId);
-    clearCache && clearCache('group', groupId);
+    perfRemoveStorageSync(`knowledge-${knowledgeId}`);
 
     // 2. 从分组索引中删除
     const groupKey = `group-${groupId}`;
-    let knowledgeIds = wx.getStorageSync(groupKey) || [];
+    let knowledgeIds = perfGetStorageSync(groupKey) || [];
     knowledgeIds = knowledgeIds.filter(id => id !== knowledgeId);
-    wx.setStorageSync(groupKey, knowledgeIds);
+    perfSetStorageSync(groupKey, knowledgeIds);
+    // 缓存同步：清除知识点缓存、分组缓存
+    clearCache && clearCache('knowledge', knowledgeId);
+    clearCache && clearCache('group', groupId);
 
     // 3. 更新分组列表中的知识点数量和统计
     const app = typeof getApp === 'function' ? getApp() : null;
@@ -654,6 +716,12 @@ const GroupManager = (() => {
       const groupIndex = groups.findIndex(g => g.id == groupId);
       if (groupIndex > -1) {
         groups[groupIndex].knowledgeCount = knowledgeIds.length;
+        // 初始化统计字段
+        if (typeof groups[groupIndex].learnedCount !== 'number') groups[groupIndex].learnedCount = 0;
+        if (typeof groups[groupIndex].masteredCount !== 'number') groups[groupIndex].masteredCount = 0;
+        if (typeof groups[groupIndex].unlearnedCount !== 'number') groups[groupIndex].unlearnedCount = 0;
+        if (typeof groups[groupIndex].unmasteredCount !== 'number') groups[groupIndex].unmasteredCount = 0;
+        if (typeof groups[groupIndex].dueCount !== 'number') groups[groupIndex].dueCount = 0;
         // 增量统计
         const now = Date.now();
         if (knowledge) {
@@ -667,15 +735,16 @@ const GroupManager = (() => {
         groups[groupIndex].unlearnedCount = groups[groupIndex].knowledgeCount - groups[groupIndex].learnedCount;
         // unmasteredCount
         groups[groupIndex].unmasteredCount = groups[groupIndex].learnedCount - groups[groupIndex].masteredCount;
-        wx.setStorageSync('groups', groups);
+        perfSetStorageSync('groups', groups);
       }
     } else {
-      updateGroupStats(groupId);
+      updateGroupStats(groupId);// 同步更新全局变量      
+      perfSetStorageSync('groups', getAllGroups()); // 保存到本地
     }
   }
 
 
-
+  // 不要在 IIFE 内部挂载 perfMetrics
   return {
     getAllGroups,
     addGroup,
@@ -703,12 +772,16 @@ const GroupManager = (() => {
     // 新增公共方法
     calcGroupStats,
     refreshAllGroupStats,
+    perfSetStorageSync,
+    perfGetStorageSync,
     // 暴露给测试的内部方法
     _getNextId: getNextId,
     _updateKnowledgeBySM2: updateKnowledgeBySM2,
-    _getGroupDataDirect: (groupId) => wx.getStorageSync(`group-${groupId}`) || [],
+    _getGroupDataDirect: (groupId) => perfGetStorageSync(`group-${groupId}`) || [],
     getDueCount,
-    reportPerf
+    reportPerf,
+    _mockStorage: mockStorage, // 供测试用例直接访问
+    perfMetrics // 新增：暴露性能指标对象
   };
 })();
 

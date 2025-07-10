@@ -43,7 +43,6 @@ Page({
         if (gapMs < 3600 * 1000) realGap = `（上次：${Math.round(gapMs / 60000)}分钟前）`;
         else if (gapMs < 24 * 3600 * 1000) realGap = `（上次：${Math.round(gapMs / 3600000)}小时前）`;
         else realGap = `（上次：${Math.round(gapMs / 86400000)}天前）`;
-        console.log("arr", JSON.stringify(arr, null, 2), addTime);
       } else if (idx > 0) {
         const gapMs = time - arr[idx - 1].time;
         if (gapMs < 3600 * 1000) realGap = `（上次：${Math.round(gapMs / 60000)}分钟前）`;
@@ -75,7 +74,7 @@ Page({
       displayRealGap: formatRealGap(idx, h.time, arr, knowledge.addTime),
       displayEfactor: formatEfactor(h.efactor)
     }));
-    this.setData({ history, addTime: knowledge.addTime, historyHasMore: hasMore }, () => {
+    this.setData({ history, addTime: knowledge.addTime, historyHasMore: hasMore, question: knowledge.question }, () => {
       this.initChart({ ...knowledge, history: pageHistory });
     });
   },

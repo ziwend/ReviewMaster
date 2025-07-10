@@ -6,24 +6,15 @@ Page({
     groupId: null,
     currentGroup: {},
     masteredList: [],
-    isEmpty: false,
     page: 1,
     pageSize: 20,
-    totalCount: 0,
     hasMore: false,
     totalPage: 0,
   },
 
-  onLoad: async function (options) {
+  onLoad: function (options) {
     const { groupId } = options;
-    await this.initData(groupId);
-  },
 
-  onShow: async function () {
-    // await this.initData();
-  },
-
-  initData: async function (groupId) {
     const groups = storage.getAllGroups();
     const currentGroup = groups.find(g => g.id == groupId) || (groups && groups[0]) || {};
     if (currentGroup && currentGroup.name) {
@@ -31,33 +22,31 @@ Page({
         title: currentGroup.name
       });
     }
+
+    const settings = storage.getSettings();
+    const pageSize = settings.batchSize || 20;
+    const totalPage = Math.ceil(currentGroup.masteredCount / pageSize);
     this.setData({
       groupId,
       currentGroup,
-      page: 1
+      pageSize,      
+      totalPage,
     });
-    await this.loadMasteredList(1);
+    console.log("master on load ");
+    this.loadMasteredList(1);
   },
 
+  onShow: async function () {
+    // await this.initData();
+  },
 
-  loadMasteredList: async function (page = 1) {
-    if (!this.data.groupId) {
-      this.setData({ masteredList: [], isEmpty: true });
-      return;
-    }
-    const settings = storage.getSettings();
-    const pageSize = settings.batchSize || 20;
-    const totalCount = this.data.currentGroup.masteredCount;
-    const masteredList = storage.getMasteredPaged(this.data.groupId, page, pageSize);
-    const totalPage = Math.ceil(totalCount / pageSize);
+  loadMasteredList: async function (page = 1) { 
+    const masteredList = storage.getMasteredPaged(this.data.groupId, page, this.data.pageSize);
+    
     this.setData({
       masteredList,
-      isEmpty: masteredList.length === 0,
-      page,
-      pageSize,
-      totalCount,
-      totalPage,
-      hasMore: page < totalPage
+      page,      
+      hasMore: page < this.data.totalPage
     });
   },
 
@@ -72,15 +61,27 @@ Page({
       this.loadMasteredList(this.data.page + 1);
     }
   },
+  updateGroup: function() {
+    const groups = storage.getAllGroups();
+    const currentGroup = groups.find(g => g.id == this.data.groupId) || (groups && groups[0]) || {};
 
+    this.setData({
+      currentGroup,
+    });
+  },
   restoreKnowledge: async function (e) {
     const { id } = e.currentTarget.dataset;
     const knowledge = this.data.masteredList.find(k => k.id === id);
     if (knowledge) {
       knowledge.status = 'pending';
       knowledge.nextReviewTime = Date.now();
-      await storage.updateKnowledge(knowledge);
-
+      knowledge.repetition = 0;
+      wx.showToast({
+        title: '正在恢复中请稍后',
+        icon: 'success',
+      });
+      storage.saveKnowledge(knowledge);
+      this.updateGroup();
       await this.loadMasteredList();
 
       wx.showToast({
@@ -103,7 +104,8 @@ Page({
           success: res => res.confirm ? resolve() : reject(new Error('用户取消'))
         });
       });
-      await storage.removeKnowledge(id, groupId);
+      storage.removeKnowledge(groupId, id);
+      this.updateGroup();
       await this.loadMasteredList();
     } catch (error) {
       // 用户取消，不做任何事

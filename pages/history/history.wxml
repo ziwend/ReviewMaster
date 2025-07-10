@@ -1,10 +1,8 @@
 <view class="history-container">
-  <ec-canvas id="historyChart" canvas-id="historyChart" ec="{{ec}}" style="width:100%;height:400rpx;min-height:300rpx;"></ec-canvas>
+  <ec-canvas id="historyChart" canvas-id="historyChart" ec="{{ec}}" style="width:100%;height:450rpx;min-height:300rpx;"></ec-canvas>
   <view class="chart-divider"></view>
   <view class="legend">
-    <text class="legend-item efactor">efactor</text>
-    <text class="legend-item score">分数</text>
-    <text class="legend-item gap">实际间隔</text>
+    <text>{{question}}</text>
   </view>
   <view class="history-list">
     <block wx:for="{{history}}" wx:key="index">

@@ -10,18 +10,18 @@ Page({
     newGroupName: '',
   },
 
-  onLoad: function () {    
+  onLoad: function () {
     this.loadGroups();
-    console.log("on load group", JSON.stringify(this.data.groups, null, 2));
-    
+    console.log("group on load");    
   },
 
   onShow: async function () {
+    this.loadGroups();
     // 全量更新并加载
-    storage.refreshAllGroupStats().then(() => {
+    storage.refreshAllReviewListsAsync().then(() => {
     this.loadGroups(); // 刷新后再同步一次
     });
-    console.log("on show group");
+    console.log("on show group finished");
   },
 
   loadGroups: function () {
@@ -78,7 +78,7 @@ Page({
   toReviewPage: function (e) {
     const { id } = e.currentTarget.dataset;
     const group = storage.getAllGroups().find(g => g.id == id);
-    console.log("group click",group.groupName);
+    console.log("group click name,id", group.name, id);
     if (group && group.knowledgeCount === 0) {
       wx.navigateTo({
         url: `/pages/import/import?groupId=${id}`

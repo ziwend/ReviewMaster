@@ -31,13 +31,29 @@ Page({
       currentGroup,
       pageSize,      
       totalPage,
+      lastRefreshTime: Date.now() // 添加最后刷新时间
     });
     console.log("master on load ");
     this.loadMasteredList(1);
   },
 
   onShow: async function () {
-    // await this.initData();
+    // 避免不必要的刷新和重复加载
+    const now = Date.now();
+    if (!this.data.lastRefreshTime || now - this.data.lastRefreshTime > 5000) {
+      const groups = storage.getAllGroups();
+      const currentGroup = groups.find(g => g.id == this.data.groupId) || {};
+      
+      // 如果掌握数量发生变化，重新加载列表
+      if (currentGroup.masteredCount !== this.data.currentGroup.masteredCount) {
+        this.setData({
+          currentGroup,
+          totalPage: Math.ceil(currentGroup.masteredCount / this.data.pageSize),
+          lastRefreshTime: now
+        });
+        this.loadMasteredList(1);
+      }
+    }
   },
 
   loadMasteredList: async function (page = 1) { 

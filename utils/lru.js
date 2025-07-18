@@ -35,10 +35,11 @@ class LRUCache {
       this._updateAccess(key);
     } else {
       // 循环淘汰直到有足够空间
-      while (this.accessQueue.length >= this.capacity) {
+      while (this.cache.size >= this.capacity) {
         this._evict();
       }
-      this.accessQueue.push(key);
+      // 新项的访问记录会在_updateAccess中添加
+      this._updateAccess(key);
     }
     this.cache.set(key, value);
   }
@@ -50,10 +51,9 @@ class LRUCache {
   delete(key) {
     if (this.cache.has(key)) {
       this.cache.delete(key);
-      const index = this.accessQueue.indexOf(key);
-      if (index > -1) {
-        this.accessQueue.splice(index, 1);
-      }
+      this.accessMap.delete(key);
+      // 不立即从队列中删除，而是在_evict或_cleanAccessQueue时处理
+      // 这样可以避免O(n)的查找操作
     }
   }
 
@@ -62,6 +62,7 @@ class LRUCache {
    */
   clear() {
     this.cache.clear();
+    this.accessMap.clear();
     this.accessQueue = [];
   }
 
@@ -71,23 +72,68 @@ class LRUCache {
    */
   _updateAccess(key) {
     // 使用时间戳更新访问记录
-    this.accessMap.set(key, Date.now());
-    // 更新队列中的位置
-    const index = this.accessQueue.indexOf(key);
-    if (index > -1) {
-      this.accessQueue.splice(index, 1);
+    const now = Date.now();
+    this.accessMap.set(key, now);
+    
+    // 优化：直接添加到队列末尾，避免indexOf和splice操作
+    // 在_evict时会处理重复项
+    this.accessQueue.push({key, timestamp: now});
+    
+    // 当队列长度超过容量的2倍时，执行清理操作
+    if (this.accessQueue.length > this.capacity * 2) {
+      this._cleanAccessQueue();
     }
-    this.accessQueue.push(key);
+  }
+
+  /**
+   * 清理访问队列中的重复项和已删除项
+   * 仅保留每个键的最新访问记录
+   */
+  _cleanAccessQueue() {
+    const seen = new Set();
+    const newQueue = [];
+    
+    // 从后向前遍历，只保留每个键的最新记录
+    for (let i = this.accessQueue.length - 1; i >= 0; i--) {
+      const {key} = this.accessQueue[i];
+      if (!seen.has(key) && this.cache.has(key)) {
+        seen.add(key);
+        newQueue.unshift(this.accessQueue[i]);
+      }
+    }
+    
+    this.accessQueue = newQueue;
   }
 
   /**
    * 淘汰最近最少使用的项
    */
   _evict() {
-    const keyToRemove = this.accessQueue.shift();
-    if (keyToRemove) {
-      this.cache.delete(keyToRemove);
-      this.accessMap.delete(keyToRemove);
+    // 如果队列为空，直接返回
+    if (this.accessQueue.length === 0) return;
+    
+    // 找到最早的有效缓存项
+    let oldestIndex = 0;
+    let oldestItem = null;
+    
+    // 查找最早的有效项
+    while (oldestIndex < this.accessQueue.length) {
+      const item = this.accessQueue[oldestIndex];
+      if (this.cache.has(item.key)) {
+        oldestItem = item;
+        break;
+      }
+      oldestIndex++;
+    }
+    
+    // 如果找到了有效项，删除它
+    if (oldestItem) {
+      this.cache.delete(oldestItem.key);
+      this.accessMap.delete(oldestItem.key);
+      this.accessQueue.splice(oldestIndex, 1);
+    } else {
+      // 如果没有找到有效项，清空队列
+      this.accessQueue = [];
     }
   }
 }

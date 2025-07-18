@@ -109,26 +109,18 @@ describe('存储模块测试', () => {
     });
     // 补分组索引
     let ids = storage.perfGetStorageSync('group-' + String(group.id)) || [];
-    console.log("test", String(id), ids);
     if (!ids.includes(String(id))) {
       ids.push(String(id));
       storage.perfSetStorageSync('group-' + String(group.id), ids);
     }
-    // 立即清理分组缓存，防止缓存污染
     storage.clearCache('group', String(group.id));
-    // 调试log：补索引后
-    console.log('[调试] group-' + String(group.id) + ':', JSON.stringify(storage.perfGetStorageSync('group-' + String(group.id))));
-    console.log('[调试] knowledge-' + String(id) + ':', JSON.stringify(storage.perfGetStorageSync('knowledge-' + String(id))));
     storage.clearCache('all');
-    // 调试log：clearCache后
-    console.log('[调试] clearCache后 group-' + String(group.id) + ':', JSON.stringify(storage.perfGetStorageSync('group-' + String(group.id))));
-    console.log('[调试] clearCache后 knowledge-' + String(id) + ':', JSON.stringify(storage.perfGetStorageSync('knowledge-' + String(id))));
     const saved = storage.perfGetStorageSync('knowledge-' + String(id));
     assert.strictEqual(saved.question, '测试问题');
   });
 
-  // 只运行两个失败用例
-  it('知识点从mastered恢复为pending时，masteredCount应减少', function() {
+
+  it('知识点从mastered恢复为pending时，masteredCount应减少', async function() {
     const group = storage.addGroup('分组');
     const id = storage._getNextId('nextKnowledgeId');
     storage.saveKnowledge({ id: String(id), groupId: String(group.id), learned: true, status: 'mastered' });
@@ -138,32 +130,20 @@ describe('存储模块测试', () => {
       ids.push(String(id));
       storage.perfSetStorageSync('group-' + String(group.id), ids);
     }
-    // 立即清理分组缓存，防止缓存污染
     storage.clearCache('group', String(group.id));
-    // 调试log：补索引后
-    console.log('[调试] group-' + String(group.id) + ':', JSON.stringify(storage.perfGetStorageSync('group-' + String(group.id))));
-    console.log('[调试] knowledge-' + String(id) + ':', JSON.stringify(storage.perfGetStorageSync('knowledge-' + String(id))));
     storage.clearCache('all');
-    storage.refreshAllGroupStats();
-    // 调试log：refreshAllGroupStats后
+    storage._mockStorage['group-' + String(group.id)] = storage.perfGetStorageSync('group-' + String(group.id));
+    await storage.refreshAllGroupStats();
     storage._mockStorage['groups'] = storage.perfGetStorageSync('groups');
-    console.log('[调试] refreshAllGroupStats后 groups:', JSON.stringify(storage._mockStorage['groups'], null, 2));
-    // 仅保留关键快照
     const g1 = storage._mockStorage['groups'].find(g => String(g.id) === String(group.id));
-    console.log('[断言前] masteredCount:', g1.masteredCount);
     assert.strictEqual(g1.masteredCount, 1, 'masteredCount 应为1');
     // 恢复为 pending
     storage.saveKnowledge({ id: String(id), groupId: String(group.id), learned: true, status: 'pending' });
     storage.clearCache('all');
-    // 调试log：clearCache后
-    console.log('[调试] clearCache后 group-' + String(group.id) + ':', JSON.stringify(storage.perfGetStorageSync('group-' + String(group.id))));
-    console.log('[调试] clearCache后 knowledge-' + String(id) + ':', JSON.stringify(storage.perfGetStorageSync('knowledge-' + String(id))));
-    storage.refreshAllGroupStats();
-    // 调试log：refreshAllGroupStats后
+    storage._mockStorage['group-' + String(group.id)] = storage.perfGetStorageSync('group-' + String(group.id));
+    await storage.refreshAllGroupStats();
     storage._mockStorage['groups'] = storage.perfGetStorageSync('groups');
-    console.log('[调试] refreshAllGroupStats后 groups:', JSON.stringify(storage._mockStorage['groups'], null, 2));
     const g2 = storage._mockStorage['groups'].find(g => String(g.id) === String(group.id));
-    console.log('[断言前] masteredCount:', g2.masteredCount);
     assert.strictEqual(g2.masteredCount, 0, 'masteredCount 应为0');
   });
 
@@ -177,11 +157,7 @@ describe('存储模块测试', () => {
       ids.push(String(id));
       storage.perfSetStorageSync('group-' + String(group.id), ids);
     }
-    // 立即清理分组缓存，防止缓存污染
     storage.clearCache('group', String(group.id));
-    // 调试log：补索引后
-    console.log('[调试] group-' + String(group.id) + ':', JSON.stringify(storage.perfGetStorageSync('group-' + String(group.id))));
-    console.log('[调试] knowledge-' + String(id) + ':', JSON.stringify(storage.perfGetStorageSync('knowledge-' + String(id))));
     storage.clearCache('all');
     storage.getGroupDataCached(String(group.id)); // miss
     storage.getGroupDataCached(String(group.id)); // hit
@@ -198,11 +174,7 @@ describe('存储模块测试', () => {
       ids.push(String(id));
       storage.perfSetStorageSync('group-' + String(group.id), ids);
     }
-    // 立即清理分组缓存，防止缓存污染
     storage.clearCache('group', String(group.id));
-    // 调试log：补索引后
-    console.log('[调试] group-' + String(group.id) + ':', JSON.stringify(storage.perfGetStorageSync('group-' + String(group.id))));
-    console.log('[调试] knowledge-' + String(id) + ':', JSON.stringify(storage.perfGetStorageSync('knowledge-' + String(id))));
     storage.clearCache('all');
     storage.getGroupDataCached(String(group.id)); // miss
     storage.getGroupDataCached(String(group.id)); // hit
@@ -211,7 +183,7 @@ describe('存储模块测试', () => {
     assert.strictEqual(storage.perfMetrics.getGroupCacheHitRate(), '0.50');
   });
 
-  it('分页查询应正确工作', () => {
+  it('分页查询应正确工作', async () => {
     const group = storage.addGroup('分页分组');
     const id1 = storage._getNextId('nextKnowledgeId');
     const id2 = storage._getNextId('nextKnowledgeId');
@@ -225,11 +197,10 @@ describe('存储模块测试', () => {
     // 立即清理分组缓存，防止缓存污染
     storage.clearCache('group', String(group.id));
     storage.clearCache('all');
-    storage.refreshAllGroupStats();
+    await storage.refreshAllGroupStats();
     storage._mockStorage['groups'] = storage.perfGetStorageSync('groups');
     const page1 = storage.getUnlearnedPaged(String(group.id), 1, 2);
-    // 关键快照
-    console.log('[断言前] unlearnedPaged:', page1.length);
+
     assert.strictEqual(page1.length, 2, '未学习知识点分页查询失败');
   });
 
@@ -240,17 +211,17 @@ describe('存储模块测试', () => {
       { question: 'Q2', answer: 'A2', learned: false }
     ];
     const result = await storage.addKnowledgeBatchToGroup(String(group.id), batch);
-    storage.refreshAllGroupStats();
+    await storage.refreshAllGroupStats();
     storage._mockStorage['groups'] = storage.perfGetStorageSync('groups');
     const g = storage._mockStorage['groups'].find(g => String(g.id) === String(group.id));
     assert.strictEqual(result.finalKnowledgeCount, 2);
     assert.strictEqual(g.knowledgeCount, 2);
   });
 
-  it('分组统计更新应正确计算', function() {
-    const group = storage.addGroup('统计分组');
+  it('分组统计更新应正确计算', async function() {
+    const group = storage.addGroup('分组');
     const id = storage._getNextId('nextKnowledgeId');
-    storage.saveKnowledge({ id: String(id), groupId: String(group.id), learned: true });
+    storage.saveKnowledge({ id: String(id), groupId: String(group.id), learned: true, status: 'learned' });
     // 补分组索引
     let ids = storage.perfGetStorageSync('group-' + String(group.id)) || [];
     if (!ids.includes(String(id))) {
@@ -259,18 +230,12 @@ describe('存储模块测试', () => {
     }
     // 立即清理分组缓存，防止缓存污染
     storage.clearCache('group', String(group.id));
-    // 调试log：补索引后
-    console.log('[调试] group-' + String(group.id) + ':', JSON.stringify(storage.perfGetStorageSync('group-' + String(group.id))));
-    console.log('[调试] knowledge-' + String(id) + ':', JSON.stringify(storage.perfGetStorageSync('knowledge-' + String(id))));
     storage.clearCache('all');
-    storage.refreshAllGroupStats();
-    // 调试log：refreshAllGroupStats后
+    storage._mockStorage['group-' + String(group.id)] = storage.perfGetStorageSync('group-' + String(group.id));
+    await storage.refreshAllGroupStats();
     storage._mockStorage['groups'] = storage.perfGetStorageSync('groups');
-    console.log('[调试] refreshAllGroupStats后 groups:', JSON.stringify(storage._mockStorage['groups'], null, 2));
-    const g = storage._mockStorage['groups'].find(g => String(g.id) === String(group.id));
-    // 关键快照
-    console.log('[断言前] learnedCount:', g.learnedCount);
-    assert.strictEqual(g.learnedCount, 1, 'learnedCount 应为1');
+    const g1 = storage._mockStorage['groups'].find(g => String(g.id) === String(group.id));
+    assert.strictEqual(g1.learnedCount, 1, 'learnedCount 应为1');
   });
 
 });

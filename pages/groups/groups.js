@@ -16,10 +16,28 @@ Page({
   },
 
   onShow: async function () {
+    // 先加载缓存数据，提供即时响应
     this.loadGroups();
-    // 全量更新并加载
+    
+    // 异步刷新复习列表，避免阻塞UI
     storage.refreshAllReviewListsAsync().then(() => {
-    this.loadGroups(); // 刷新后再同步一次
+      // 获取当前组数据
+      const currentGroups = this.data.groups.map(g => g.id);
+      // 获取最新组数据
+      const latestGroups = storage.getAllGroups();
+      
+      // 检查数据是否有变化
+      const hasChanges = latestGroups.some((g, i) => {
+        const oldGroup = this.data.groups.find(og => og.id === g.id);
+        return !oldGroup || 
+               oldGroup.dueCount !== g.dueCount || 
+               oldGroup.knowledgeCount !== g.knowledgeCount;
+      });
+      
+      // 只有在数据有变化时才更新UI
+      if (hasChanges) {
+        this.loadGroups();
+      }
     });
     console.log("on show group finished");
   },

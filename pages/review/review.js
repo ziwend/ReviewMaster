@@ -85,7 +85,8 @@ Page({
             page: 1, // 当前分页页码
             pageSize,
             showGestureGuide: !hideGuide,
-            gestureGuideActive: !hideGuide
+            gestureGuideActive: !hideGuide,
+            lastRefreshTime: Date.now() // 添加最后刷新时间
         }, () => {
             this.loadNextBatch();
         });
@@ -99,9 +100,20 @@ Page({
     },
 
     onShow: function () {
-        this.loadGroups();
-        this.settings = storage.getSettings();
-        console.log("review on show");
+        // 获取当前时间
+        const now = Date.now();
+        // 如果距离上次刷新超过5秒，才重新获取分组信息
+        // 这可以避免频繁切换页面时的不必要刷新
+        if (!this.data.lastRefreshTime || now - this.data.lastRefreshTime > 5000) {
+            this.loadGroups();
+            this.settings = storage.getSettings();
+            this.setData({
+                lastRefreshTime: now
+            });
+            console.log("review on show - refreshed");
+        } else {
+            console.log("review on show - skipped refresh");
+        }
     },
     loadGroups: function () {
         // 只加载分组基本信息和统计字段

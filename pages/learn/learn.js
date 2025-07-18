@@ -45,12 +45,11 @@ Page({
                 title: currentGroup.name
             });
         }
-        const unlearnedCount = currentGroup.unlearnedCount;
-        const totalBatchCount = Math.ceil(unlearnedCount / pageSize);
-
         const hideGuide = storage.perfGetStorageSync('hideLearnGestureGuide');
         this.settings = storage.getSettings();
         const pageSize = this.settings.batchSize || 20;
+        const unlearnedCount = currentGroup.unlearnedCount;
+        const totalBatchCount = Math.ceil(unlearnedCount / pageSize);
         
         this.setData({
             groupId,
@@ -62,6 +61,7 @@ Page({
             pageSize,            
             showGestureGuide: !hideGuide,
             gestureGuideActive: !hideGuide,
+            lastRefreshTime: Date.now() // 添加最后刷新时间，避免频繁刷新
         }, () => {
             this.loadNextBatch();
         });
@@ -71,7 +71,14 @@ Page({
     },
 
     onShow: function () {
-        this.loadGroups();
+        // 获取当前时间，避免频繁切换页面时的不必要刷新
+        const now = Date.now();
+        if (!this.data.lastRefreshTime || now - this.data.lastRefreshTime > 5000) {
+            this.loadGroups();
+            this.setData({
+                lastRefreshTime: now
+            });
+        }
         console.log("learn on show");
     },
     loadGroups: function () {
